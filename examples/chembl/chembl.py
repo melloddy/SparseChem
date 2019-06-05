@@ -18,12 +18,12 @@ loader_tr  = DataLoader(dataset, batch_size=batch_size, num_workers = 4, pin_mem
 
 conf = sc.ModelConfig(
     input_size         = dataset.input_size,
-    hidden_sizes       = [100],
+    hidden_sizes       = [200],
     output_size        = dataset.output_size,
-    input_size_freq    = 1000,
-    tail_hidden_size   = 20,
-    last_dropout       = 0.1,
-    weight_decay       = 1e-3,
+    #input_size_freq    = 1000,
+    #tail_hidden_size   = 20,
+    last_dropout       = 0.0,
+    weight_decay       = 0.0,
     last_non_linearity = "relu",
 )
 ## custom conf options
@@ -43,6 +43,9 @@ for epoch in range(conf.epochs):
     scheduler.step()
     net.train()
 
+    loss_sum   = 0.0
+    loss_count = 0
+
     for b in tqdm.tqdm(loader_tr):
         x_ind  = b["x_ind"].to(dev)
         x_data = b["x_data"].to(dev)
@@ -57,5 +60,11 @@ for epoch in range(conf.epochs):
         output.backward()
 
         optimizer.step()
+
+        loss_sum   += output.detach()
+        loss_count += 1
+
+    loss_tr = loss_sum / loss_count
+    print(f"Epoch {epoch}. loss_tr={loss_tr:.5f}")
 
 

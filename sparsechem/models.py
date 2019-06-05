@@ -74,6 +74,37 @@ class ModelConfig(object):
             self.input_size_freq = input_size_freq
             assert self.input_size_freq <= input_size, f"Input size {input_size} is smaller than freq input size {self.input_size_freq}"
 
+def sparse_split2(tensor, split_size, dim=0):
+    """
+    Splits tensor into two parts.
+    Args:
+        split_size   index where to split
+        dim          dimension which to split
+    """
+    assert tensor.layout == torch.sparse_coo
+    indices = tensor._indices()
+    values  = tensor._values()
+
+    shape  = tensor.shape
+    shape0 = shape[:dim] + (split_size,) + shape[dim+1:]
+    shape1 = shape[:dim] + (shape[dim] - split_size,) + shape[dim+1:]
+
+    mask0 = indices[dim] < split_size
+    X0 = torch.sparse_coo_tensor(
+            indices = indices[:, mask0],
+            values  = values[mask0],
+            size    = shape0)
+
+    indices1       = indices[:, ~mask0]
+    indices1[dim] -= split_size
+    X1 = torch.sparse_coo_tensor(
+            indices = indices1,
+            values  = values[~mask0],
+            size    = shape1)
+    return X0, X1
+
+
+
 class SparseInputNet(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
@@ -83,29 +114,17 @@ class SparseInputNet(torch.nn.Module):
         if self.input_splits[1] == 0:
             self.net_rare = None
         else:
+            ## TODO: try adding nn.ReLU() after SparseLinear
+            ## Bias is not needed as net_freq provides it
             self.net_rare = nn.Sequential(
-                SparseLinear(self.input_splits[1], self.tail_hidden_size),
-                ## TODO: try if it is better
-                #nn.ReLU(),
-                ## Bias is not needed as net_freq provides it
-                nn.Linear(self.tail_hidden_size, self.hidden_sizes[0], bias=False),
+                SparseLinear(self.input_splits[1], conf.tail_hidden_size),
+                nn.Linear(conf.tail_hidden_size, conf.hidden_sizes[0], bias=False),
             )
 
-    def forward(self, x_ind, x_data, num_rows):
+    def forward(self, X):
         if self.input_splits[1] == 0:
-            X = torch.sparse_coo_tensor(x_ind, x_data,
-                    size=[num_rows, self.input_splits[0]])
             return self.net_freq(X)
-        ## splitting into freq and rare
-        mask_freq = x_ind[1] < self.input_splits[0]
-        Xfreq = torch.sparse_coo_tensor(
-                    indices = x_ind[:, mask_freq],
-                    values  = x_data[mask_freq],
-                    size    = [num_rows, self.input_splits[0]])
-        Xrare = torch.sparse_coo_tensor(
-                    indices = x_ind[:, ~mask_freq],
-                    values  = x_data[~mask_freq],
-                    size    = [num_rows, self.input_splits[1]])
+        Xfreq, Xrare = sparse_split2(X, self.input_splits[0], dim=1)
         return self.net_freq(Xfreq) + self.net_rare(Xrare)
 
 class IntermediateNet(torch.nn.Module):
@@ -137,14 +156,13 @@ class SparseFFN(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
 
-        self.input_net = SparseInputNet(conf)
         self.net = nn.Sequential(
+            SparseInputNet(conf),
             IntermediateNet(conf),
             LastNet(conf),
         )
 
-    def forward(self, x_ind, x_data, num_rows):
-        H = self.input_net(x_ind, x_data, num_rows)
-        return self.net(H)
+    def forward(self, X):
+        return self.net(X)
 
 

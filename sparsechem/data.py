@@ -11,7 +11,7 @@ class SparseDataset(Dataset):
             Y (sparse matrix): output [n_samples, features_out]
         '''
         self.x = x.tocsr(copy=False).astype(np.float32)
-        self.y = y.tocsr(copy=False)
+        self.y = y.tocsr(copy=False).astype(np.float32)
 
         assert self.x.shape[0]==self.y.shape[0], f"Input has {self.x.shape[0]} rows, output has {self.y.shape[0]} rows."
 
@@ -56,14 +56,13 @@ def sparse_collate(batch):
     xv   = np.concatenate(x_data)
 
     ## y matrix
-    y_row  = np.repeat(np.arange(len(y_ind)), [len(i) for i in y_ind])
-    y_col  = np.concatenate(y_ind).astype(np.int64)
+    yrow  = np.repeat(np.arange(len(y_ind)), [len(i) for i in y_ind])
+    ycol  = np.concatenate(y_ind).astype(np.int64)
 
     return {
         "x_ind":  torch.LongTensor([xrow, xcol]),
         "x_data": torch.from_numpy(xv),
-        "y_row":  torch.from_numpy(y_row),
-        "y_col":  torch.from_numpy(y_col),
+        "y_ind":  torch.LongTensor([yrow, ycol]),
         "y_data": torch.from_numpy(np.concatenate(y_data)),
         "batch_size": len(batch),
     }

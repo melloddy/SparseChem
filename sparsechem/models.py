@@ -162,6 +162,14 @@ class SparseFFN(torch.nn.Module):
             LastNet(conf),
         )
 
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if type(m) in [nn.Linear, SparseLinear]:
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
+
+
     def forward(self, X):
         return self.net(X)
 

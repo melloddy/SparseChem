@@ -86,7 +86,7 @@ idx_va     = rperm[num_tr:]
 dataset_tr = sc.SparseDataset(x=ecfp[idx_tr], y=ic50[idx_tr])
 dataset_va = sc.SparseDataset(x=ecfp[idx_va], y=ic50[idx_va])
 
-loader_tr  = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
+loader_tr  = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 8, pin_memory=True, collate_fn=sc.sparse_collate)
 loader_va  = DataLoader(dataset_va, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
 
 conf = sc.ModelConfig(

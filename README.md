@@ -10,3 +10,11 @@ SparseChem depends on **pytorch**, which you have to install first, other depend
 ```
 pip install -e .
 ```
+
+# ChEMBL Example
+
+```
+cd ./examples/chembl
+python chembl_train.py
+```
+

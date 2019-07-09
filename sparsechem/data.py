@@ -37,6 +37,18 @@ class SparseDataset(Dataset):
             "y_data": yi.data,
         }
 
+    def batch_to_x(self, batch, dev):
+        """Takes 'xind' and 'x_data' from batch and converts them into a sparse tensor.
+        Args:
+            batch  batch
+            dev    device to send the tensor to
+        """
+        return torch.sparse_coo_tensor(
+                batch["x_ind"].to(dev),
+                batch["x_data"].to(dev),
+                size=[batch["batch_size"], self.x.shape[1]])
+
+
 class MappingDataset(Dataset):
     def __init__(self, x_ind, x_data, y, mapping=None):
         """

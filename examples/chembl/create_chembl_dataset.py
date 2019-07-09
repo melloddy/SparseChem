@@ -69,7 +69,7 @@ top10pct = top10pct[np.argsort(np.abs(0.5 - X6mean[top10pct]))]
 ## compute LSH
 def make_lsh(X, bits):
     bit2int = np.power(2, np.arange(len(bits)))
-    lsh     = X6[:,bits] @ bit2int
+    lsh     = X[:,bits] @ bit2int
     return lsh
 
 def fold_lsh(lsh, nfolds = 3):

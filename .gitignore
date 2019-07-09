@@ -3,4 +3,5 @@ __pycache__
 *.egg-info
 *.csv
 *.png
+*.pdf
 *.npy

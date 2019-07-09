@@ -78,12 +78,17 @@ def fold_lsh(lsh, nfolds = 3):
     ## mapping lsh to folds
     return np.vectorize(lambda i: lsh2fold[i])(lsh)
 
+## saving random split
+fold_random = fold_lsh(np.arange(X6.shape[0]), nfolds = 3)
+np.save("./chembl_23_folds_random.npy", fold_random)
+
 nbits = [14, 15, 16, 18, 20]
 lshs  = [make_lsh(X6, top10pct[:i]) for i in nbits]
 folds = [fold_lsh(lsh, 3) for lsh in lshs]
 
 df = pd.DataFrame({"ecfp": fps[top10pct], "freq": X6mean[top10pct]})
-print(f"Saved highest entropy features: {}")
+df.to_csv("chembl_23_highest_entropy.csv")
+print(f"Saved highest entropy features to 'chembl_23_highest_entropy.csv'.")
 
 for i, n in enumerate(nbits):
     print(f"#clusters for {n}bits: {np.unique(lshs[i]).shape[0]}")
@@ -92,7 +97,7 @@ for i, n in enumerate(nbits):
 for i, n in enumerate(nbits):
     np.save(f"./chembl_23_folds{n}.npy", folds[i])
 
-scipy.io.mmwrite( "./chembl_23_ecfp6.mtx", X6)
+scipy.io.mmwrite("./chembl_23_ecfp6.mtx", X6)
 print(f"Saved data for {X6.shape[0]} compounds into files with prefix 'chembl_23_ecfp6.mtx'.")
 
 ## plotting

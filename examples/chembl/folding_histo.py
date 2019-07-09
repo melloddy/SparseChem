@@ -1,3 +1,4 @@
+import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix 
 from matplotlib import pyplot as plt
 import scipy.io as sio
@@ -31,7 +32,7 @@ def mindists(X, folds, Nsample= 1000, fold = 0):
 
 X = sio.mmread(f'/home/jaak/git/sparsechem/examples/chembl/chembl_23_ecfp6.mtx')
 X = X.tocsr()
-for i in ["14", "15", "16", "18", "20"]:
+for i in ["14", "15", "16", "18", "20", "_random"]:
     folds = np.load(f'/home/jaak/git/sparsechem/examples/chembl/chembl_23_folds{i}.npy')
     plt.hist(mindists(X, folds), np.arange(0, 1.01, 0.05))
     plt.xlabel("Distance")

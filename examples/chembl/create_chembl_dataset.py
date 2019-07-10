@@ -7,6 +7,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.SaltRemover import SaltRemover
 import argparse
+import hashlib
+import random
 
 import matplotlib as mpl
 mpl.use('Agg')
@@ -78,17 +80,39 @@ def fold_lsh(lsh, nfolds = 3):
     ## mapping lsh to folds
     return np.vectorize(lambda i: lsh2fold[i])(lsh)
 
-## saving random split
+def sha256(inputs):
+    m = hashlib.sha256()
+    for i in inputs:
+        m.update(i)
+    return m.digest()
+
+def lsh_to_fold(lsh, secret, nfolds):
+    lsh_bin = str(lsh).encode("ASCII")
+    h       = sha256([lsh_bin, secret])
+    random.seed(h, version=2)
+    return random.randint(0, nfolds - 1)
+
+def hashed_fold_lsh(lsh, secret, nfolds = 3):
+    ## map each lsh into fold
+    lsh_uniq = np.unique(lsh)
+    lsh_fold = np.vectorize(lambda x: lsh_to_fold(x, secret, nfolds=nfolds))(lsh_uniq)
+    lsh2fold = dict(zip(lsh_uniq, lsh_fold))
+    return np.vectorize(lambda i: lsh2fold[i])(lsh)
+
+## saving random split without clustering
 fold_random = fold_lsh(np.arange(X6.shape[0]), nfolds = 3)
 np.save("./chembl_23_folds_random.npy", fold_random)
 
+## LSH clustered random split
+secret = b"1i38vja09w29vja9a3rf98aj18c9q9afia94"
+
 nbits = [14, 15, 16, 18, 20]
 lshs  = [make_lsh(X6, top10pct[:i]) for i in nbits]
-folds = [fold_lsh(lsh, 3) for lsh in lshs]
+folds = [hashed_fold_lsh(lsh, secret, 3) for lsh in lshs]
 
-df = pd.DataFrame({"ecfp": fps[top10pct], "freq": X6mean[top10pct]})
-df.to_csv("chembl_23_highest_entropy.csv")
-print(f"Saved highest entropy features to 'chembl_23_highest_entropy.csv'.")
+df = pd.DataFrame({"ecfp": fps[top10pct], "chembl_frequency": X6mean[top10pct]})
+df.to_csv("chembl_23_lsh_highest_entropy.csv")
+print(f"Saved highest entropy features to 'chembl_23_lsh_highest_entropy.csv'.")
 
 for i, n in enumerate(nbits):
     print(f"#clusters for {n}bits: {np.unique(lshs[i]).shape[0]}")

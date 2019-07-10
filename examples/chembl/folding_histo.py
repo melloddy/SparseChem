@@ -34,8 +34,8 @@ X = sio.mmread(f'/home/jaak/git/sparsechem/examples/chembl/chembl_23_ecfp6.mtx')
 X = X.tocsr()
 for i in ["14", "15", "16", "18", "20", "_random"]:
     folds = np.load(f'/home/jaak/git/sparsechem/examples/chembl/chembl_23_folds{i}.npy')
-    plt.hist(mindists(X, folds), np.arange(0, 1.01, 0.05))
-    plt.xlabel("Distance")
+    plt.hist(mindists(X, folds), np.arange(0, 1.01, 0.05), orientation="horizontal")
+    plt.ylabel("Distance")
     plt.savefig(f"folds{i}.pdf")
     plt.close()
 

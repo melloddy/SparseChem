@@ -114,6 +114,12 @@ df = pd.DataFrame({"ecfp": fps[top10pct], "chembl_frequency": X6mean[top10pct]})
 df.to_csv("chembl_23_lsh_highest_entropy.csv")
 print(f"Saved highest entropy features to 'chembl_23_lsh_highest_entropy.csv'.")
 
+## saving covariance matrix
+X6_top10 = X6[:, top10pct].todense()
+corr     = np.corrcoef(X6_top10.T)
+corr_df  = pd.DataFrame(corr)
+corr_df.to_csv("chembl_23_lsh_corr.csv")
+
 for i, n in enumerate(nbits):
     print(f"#clusters for {n}bits: {np.unique(lshs[i]).shape[0]}")
 

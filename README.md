@@ -12,9 +12,16 @@ pip install -e .
 ```
 
 # ChEMBL Example
+First data has to be downloaded into `examples/chembl`:
+```
+https://www.esat.kuleuven.be/~aarany/chembl_23_x.mtx
+https://www.esat.kuleuven.be/~aarany/chembl_23_y.mtx
+```
 
+Then execute training:
 ```
 cd ./examples/chembl
 python chembl_train.py
 ```
+
 

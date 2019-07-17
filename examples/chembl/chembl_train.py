@@ -17,8 +17,6 @@ auc_cols = np.where((num_pos >= 50) & (num_neg >= 50))[0]
 
 print(f"There are {len(auc_cols)} columns for AUC calculation (i.e., at least 50 positives and 50 negatives).")
 
-## changing ic50 to 0/1 encoding
-#ic50.data = (ic50.data == 1).astype(np.float32)
 fold_va = 0
 idx_tr  = np.where(folding != fold_va)[0]
 idx_va  = np.where(folding == fold_va)[0]

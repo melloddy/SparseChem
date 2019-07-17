@@ -32,6 +32,7 @@ salt_remover = SaltRemover(defnData="[Cl,Na,Br,I,K]")
 
 ## only unique features for given ECFP radius
 ecfp6 = []
+ecfp6_counts = []
 
 ## converting smiles into ECFP
 keep3 = np.zeros(smiles.shape[0], dtype=np.bool)
@@ -41,16 +42,17 @@ for i in tqdm.trange(smiles.shape[0]):
     if mol.GetNumAtoms() > args.max_num_atoms:
         continue
     keep3[i] = True
-    fps3 = AllChem.GetMorganFingerprint(mol, 3).GetNonzeroElements().keys()
-    ecfp6.append(np.array(list(fps3)))
+    fps3 = AllChem.GetMorganFingerprint(mol, 3).GetNonzeroElements()
+    ecfp6.append(np.array(list(fps3.keys())))
+    ecfp6_counts.append(np.array(list(fps3.values())))
 
 print(f"Kept {keep3.sum()} compounds out of {keep3.shape[0]}.")
 
-def make_csr(ecfpx):
+def make_csr(ecfpx, ecfpx_counts):
     ecfpx_lengths = [len(x) for x in ecfpx]
     ecfpx_cmpd    = np.repeat(np.arange(len(ecfpx)), ecfpx_lengths)
     ecfpx_feat    = np.concatenate(ecfpx)
-    ecfpx_val     = np.ones(ecfpx_feat.shape, np.int64)
+    ecfpx_val     = np.concatenate(ecfpx_counts)
 
     ecfpx_feat_uniq = np.unique(ecfpx_feat)
     fp2idx = dict(zip(ecfpx_feat_uniq, range(ecfpx_feat_uniq.shape[0])))
@@ -59,7 +61,7 @@ def make_csr(ecfpx):
     X0 = csr_matrix((ecfpx_val, (ecfpx_cmpd, ecfpx_idx)))
     return X0, ecfpx_feat_uniq
 
-X6, fps  = make_csr(ecfp6)
+X6, fps  = make_csr(ecfp6, ecfp6_counts)
 X6.data  = X6.data.astype(np.int64)
 X6mean   = np.array(X6.mean(0)).flatten()
 
@@ -72,6 +74,9 @@ def make_lsh(X, bits):
     bit2int = np.power(2, np.arange(len(bits)))
     lsh     = X[:,bits] @ bit2int
     return lsh
+
+## convert bool array 'bits' into string
+# "".join(str(int(x)) for x in bits)
 
 def fold_lsh(lsh, nfolds = 3):
     lsh_uniq = np.unique(lsh)

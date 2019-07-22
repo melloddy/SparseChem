@@ -40,40 +40,6 @@ class SparseLinear(torch.nn.Module):
             self.weight.shape[0], self.weight.shape[1], self.bias is not None
         )
 
-class ModelConfig(object):
-    def __init__(self,
-        input_size,
-        hidden_sizes,
-        output_size,
-        mapping            = None,
-        hidden_dropout     = 0.0,
-        last_dropout       = 0.0,
-        weight_decay       = 0.0,
-        input_size_freq    = None,
-        tail_hidden_size   = None,
-        non_linearity      = "relu",
-        last_non_linearity = "relu",
-    ):
-        assert non_linearity in non_linearities.keys(), f"non_linearity can be either {non_linearities.keys()}."
-        if mapping is not None:
-            assert input_size == mapping.shape[0]
-
-        self.mapping            = mapping
-        self.input_size         = input_size
-        self.hidden_sizes       = hidden_sizes
-        self.output_size        = output_size
-        self.hidden_dropout     = hidden_dropout
-        self.last_dropout       = last_dropout
-        self.last_non_linearity = last_non_linearity
-        self.weight_decay       = weight_decay
-        self.tail_hidden_size   = tail_hidden_size
-        self.non_linearity      = non_linearity
-        if input_size_freq is None:
-            self.input_size_freq = input_size
-        else:
-            self.input_size_freq = input_size_freq
-            assert self.input_size_freq <= input_size, f"Input size {input_size} is smaller than freq input size {self.input_size_freq}"
-
 def sparse_split2(tensor, split_size, dim=0):
     """
     Splits tensor into two parts.
@@ -108,6 +74,9 @@ def sparse_split2(tensor, split_size, dim=0):
 class SparseInputNet(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
+        if conf.input_size_freq is None:
+            conf.input_size_freq = conf.input_size
+        assert conf.input_size_freq <= conf.input_size, f"Number of high important features ({conf.input_size_freq}) should not be higher input size ({conf.input_size})."
         self.input_splits = [conf.input_size_freq, conf.input_size - conf.input_size_freq]
         self.net_freq   = SparseLinear(self.input_splits[0], conf.hidden_sizes[0])
 

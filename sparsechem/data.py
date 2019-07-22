@@ -54,6 +54,7 @@ class MappingDataset(Dataset):
         """
         Dataset that creates a mapping for features of x (0...N_feat-1).
         """
+        ## TODO: need to implement Dataset with custom mapping
         pass
 
 def sparse_collate(batch):

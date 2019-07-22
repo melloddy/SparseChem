@@ -32,9 +32,9 @@ def evaluate_binary(net, loader, loss, dev):
     with torch.no_grad():
         for b in tqdm.tqdm(loader, leave=False):
             X = torch.sparse_coo_tensor(
-                    b["x_ind"].to(dev),
-                    b["x_data"].to(dev),
-                    size = [b["batch_size"], loader.dataset.input_size])
+                    b["x_ind"],
+                    b["x_data"],
+                    size = [b["batch_size"], loader.dataset.input_size]).to(dev)
             y_ind  = b["y_ind"].to(dev)
             y_data = b["y_data"].to(dev)
             y_data = (y_data + 1) / 2.0

@@ -16,6 +16,7 @@ First data has to be downloaded into `examples/chembl`:
 ```
 https://www.esat.kuleuven.be/~aarany/chembl_23_x.mtx
 https://www.esat.kuleuven.be/~aarany/chembl_23_y.mtx
+https://www.esat.kuleuven.be/~aarany/folding_hier_0.6.npy
 ```
 
 Then execute training:

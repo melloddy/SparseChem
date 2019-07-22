@@ -29,6 +29,8 @@ parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 args = parser.parse_args()
 
 print(args)
+name = f"sc_chembl_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+print(f"Run name is '{name}'.")
 
 assert args.input_size_freq is None, "Using tail compression not yet supported."
 
@@ -106,4 +108,13 @@ for epoch in range(args.epochs):
     aucs_va = results_va["aucs"].loc[auc_cols].mean()
     print(f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}\taucs_tr={aucs_tr:.5f}\taucs_va={aucs_va:.5f}")
 
+results_file = f"{name}.npy"
+results = {}
+results["conf"] = args
+results["results"] = {}
+results["results"]["va"] = {"aucs": aucs_va, "logloss": results_va['logloss']}
+results["results"]["tr"] = {"aucs": aucs_tr, "logloss": results_tr['logloss']}
+
+np.save(results_file, results)
+print(f"Saved results into '{results_file}'.")
 

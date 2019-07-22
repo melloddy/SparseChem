@@ -57,5 +57,5 @@ def evaluate_binary(net, loader, loss, dev):
 
         return {
             'aucs':    aucs,
-            'logloss': logloss_sum / logloss_count
+            'logloss': logloss_sum.cpu().numpy() / logloss_count
         }

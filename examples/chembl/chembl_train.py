@@ -71,7 +71,6 @@ optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.wei
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
 for epoch in range(args.epochs):
-    scheduler.step()
     net.train()
 
     loss_sum   = 0.0
@@ -107,6 +106,7 @@ for epoch in range(args.epochs):
     aucs_tr = results_tr["aucs"].loc[auc_cols].mean()
     aucs_va = results_va["aucs"].loc[auc_cols].mean()
     print(f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}\taucs_tr={aucs_tr:.5f}\taucs_va={aucs_va:.5f}")
+    scheduler.step()
 
 results_file = f"{name}.npy"
 results = {}

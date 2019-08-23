@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import scipy.io
 from scipy.sparse import csr_matrix
-import graphinformer as gi
 import tqdm
 from rdkit import Chem
 from rdkit.Chem import AllChem

@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 import torch
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 def auc_roc(y_true, y_score):
     if len(y_true) <= 1:
         return np.nan

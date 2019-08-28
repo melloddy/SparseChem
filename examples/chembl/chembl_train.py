@@ -23,6 +23,7 @@ parser.add_argument("--lr", help="Learning rate", type=float, default=1e-3)
 parser.add_argument("--lr_alpha", help="Learning rate decay multiplier", type=float, default=0.3)
 parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", type=int, default=[10])
 parser.add_argument("--input_size_freq", help="Number of high importance features", type=int, default=None)
+parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no folding)", type=int, default=None)
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 
@@ -41,11 +42,15 @@ folding = np.load(args.folding)
 assert ecfp.shape[0] == ic50.shape[0]
 assert ecfp.shape[0] == folding.shape[0]
 
+if args.fold_inputs is not None:
+    ecfp = sc.fold_inputs(ecfp, folding_size=args.fold_inputs)
+    print(f"Folding inputs to {ecfp.shape[1]} dimensions.")
+
 num_pos  = np.array((ic50 == +1).sum(0)).flatten()
 num_neg  = np.array((ic50 == -1).sum(0)).flatten()
-auc_cols = np.where((num_pos >= 50) & (num_neg >= 50))[0]
+auc_cols = np.where((num_pos >= 25) & (num_neg >= 25))[0]
 
-print(f"There are {len(auc_cols)} columns for AUC calculation (i.e., at least 50 positives and 50 negatives).")
+print(f"There are {len(auc_cols)} columns for AUC calculation (i.e., at least 25 positives and 25 negatives).")
 
 fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]

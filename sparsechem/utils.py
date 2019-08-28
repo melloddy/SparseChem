@@ -3,6 +3,7 @@ import tqdm
 import pandas as pd
 import numpy as np
 import torch
+import scipy.sparse
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -62,3 +63,30 @@ def evaluate_binary(net, loader, loss, dev):
             'aucs':    aucs,
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
+
+def fold_inputs(x, folding_size, binarize=True):
+    if x.shape[1] <= folding_size:
+        return x
+    ## collapse x into folding_size columns
+    idx = x.nonzero()
+    folded = idx[1] % folding_size
+    x2  = scipy.sparse.csr_matrix((x.data, (idx[0], folded)), shape=(x.shape[0], folding_size))
+    if binarize:
+        x2.data = (x2.data > 0).astype(np.float)
+    return x2
+
+
+def set_weights(net, filename="./tf_h400_inits.npy"):
+    """
+    Loads weights from disk and net parameters from them.
+    """
+    print(f"Loading weights from '{filename}'.")
+    torch_to_value = np.load(filename, allow_pickle=True).item()
+    for name, param in net.named_parameters():
+        value = torch_to_value[name]
+        if value.shape != param.shape:
+            value = value.T
+        assert value.shape == param.shape
+        param.data.copy_(torch.FloatTensor(value))
+    print("Weights have been copied to Pytorch net.")
+

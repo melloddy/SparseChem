@@ -15,6 +15,7 @@ parser.add_argument("--folding", help="Folding file (npy)", type=str, default="f
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
+parser.add_argument("--middle_dropout", help="Last dropout", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
 parser.add_argument("--weight_decay", help="Weight decay", type=float, default=0.0)
 parser.add_argument("--last_non_linearity", help="Last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
@@ -25,6 +26,7 @@ parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", t
 parser.add_argument("--input_size_freq", help="Number of high importance features", type=int, default=None)
 parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no folding)", type=int, default=None)
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
+parser.add_argument("--min_samples_auc", help="Minimum number samples for AUC calculation", type=int, default=25)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 
 args = parser.parse_args()
@@ -48,9 +50,12 @@ if args.fold_inputs is not None:
 
 num_pos  = np.array((ic50 == +1).sum(0)).flatten()
 num_neg  = np.array((ic50 == -1).sum(0)).flatten()
-auc_cols = np.where((num_pos >= 25) & (num_neg >= 25))[0]
+auc_cols = np.where((num_pos >= args.min_samples_auc) & (num_neg >= args.min_samples_auc))[0]
 
-print(f"There are {len(auc_cols)} columns for AUC calculation (i.e., at least 25 positives and 25 negatives).")
+print(f"There are {len(auc_cols)} columns for calculating mean AUC (i.e., have at least {args.min_samples_auc} positives and {args.min_samples_auc} negatives).")
+print(f"Input dimension: {ecfp.shape[1]}")
+print(f"#samples:        {ecfp.shape[0]}")
+print(f"#tasks:          {ic50.shape[1]}")
 
 fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]
@@ -71,6 +76,9 @@ args.output_size = dataset_tr.output_size
 dev  = args.dev
 net  = sc.SparseFFN(args).to(dev)
 loss = torch.nn.BCEWithLogitsLoss(reduction="none")
+
+print("Network:")
+print(net)
 
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
@@ -122,4 +130,15 @@ results["results"]["tr"] = {"aucs": aucs_tr, "logloss": results_tr['logloss']}
 
 np.save(results_file, results)
 print(f"Saved results into '{results_file}'.")
+
+aucs = pd.DataFrame({
+    "num_pos": num_pos,
+    "num_neg": num_neg,
+    "auc_tr":  results_tr["aucs"],
+    "auc_va":  results_va["aucs"],
+})
+
+aucs_file = f"{name}-aucs.csv"
+aucs.to_csv(aucs_file)
+print(f"Saved metrics for each task into '{aucs_file}'.")
 

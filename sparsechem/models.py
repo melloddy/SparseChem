@@ -21,13 +21,6 @@ class SparseLinear(torch.nn.Module):
             self.bias = nn.Parameter(torch.zeros(out_features))
         else:
             self.register_parameter('bias', None)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        stdv = 1. / math.sqrt(self.weight.size(1))
-        self.weight.data.uniform_(-stdv, stdv)
-        if self.bias is not None:
-            self.bias.data.zero_()
 
     def forward(self, input):
         out = torch.mm(input, self.weight)
@@ -89,6 +82,17 @@ class SparseInputNet(torch.nn.Module):
                 SparseLinear(self.input_splits[1], conf.tail_hidden_size),
                 nn.Linear(conf.tail_hidden_size, conf.hidden_sizes[0], bias=False),
             )
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if type(m) == SparseLinear:
+            torch.nn.init.xavier_uniform_(m.weight, gain=torch.nn.init.calculate_gain("relu"))
+            m.bias.data.fill_(0.1)
+        if type(m) == nn.Linear:
+            torch.nn.init.xavier_uniform_(m.weight, gain=torch.nn.init.calculate_gain("relu"))
+            if m.bias is not None:
+                m.bias.data.fill_(0.1)
+
 
     def forward(self, X):
         if self.input_splits[1] == 0:
@@ -96,28 +100,45 @@ class SparseInputNet(torch.nn.Module):
         Xfreq, Xrare = sparse_split2(X, self.input_splits[0], dim=1)
         return self.net_freq(Xfreq) + self.net_rare(Xrare)
 
-class IntermediateNet(torch.nn.Module):
+class MiddleNet(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
         self.net = nn.Sequential()
         for i in range(len(conf.hidden_sizes) - 1):
-            self.intermediate_net.add_module(nn.Sequential(
+            self.net.add_module(f"layer_{i}", nn.Sequential(
                 nn.ReLU(),
-                nn.Dropout(conf.hidden_dropout),
-                nn.Linear(conf.hidden_sizes[i], conf.hidden_sizes[i+1]),
+                nn.Dropout(conf.middle_dropout),
+                nn.Linear(conf.hidden_sizes[i], conf.hidden_sizes[i+1], bias=True),
             ))
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if type(m) == nn.Linear:
+            torch.nn.init.xavier_uniform_(m.weight, gain=torch.nn.init.calculate_gain("relu"))
+            if m.bias is not None:
+                m.bias.data.fill_(0.1)
+
     def forward(self, H):
         return self.net(H)
 
 class LastNet(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
+        self.non_linearity = conf.last_non_linearity
         non_linearity = non_linearities[conf.last_non_linearity]
         self.net = nn.Sequential(
             non_linearity(),
             nn.Dropout(conf.last_dropout),
             nn.Linear(conf.hidden_sizes[-1], conf.output_size),
         )
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if type(m) == nn.Linear:
+            torch.nn.init.xavier_uniform_(m.weight, gain=torch.nn.init.calculate_gain("sigmoid"))
+            if m.bias is not None:
+                m.bias.data.fill_(0.1)
+
     def forward(self, H):
         return self.net(H)
 
@@ -127,16 +148,9 @@ class SparseFFN(torch.nn.Module):
 
         self.net = nn.Sequential(
             SparseInputNet(conf),
-            IntermediateNet(conf),
+            MiddleNet(conf),
             LastNet(conf),
         )
-
-        self.apply(self.init_weights)
-
-    def init_weights(self, m):
-        if type(m) in [nn.Linear, SparseLinear]:
-            torch.nn.init.xavier_uniform_(m.weight)
-            m.bias.data.fill_(0.01)
 
 
     def forward(self, X):

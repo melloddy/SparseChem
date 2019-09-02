@@ -83,4 +83,24 @@ The default device is `cuda:0`.
 To train the model on CPU just add `--dev cpu` to the arguments.
 Similarly, to choose another GPU, we can specify `--dev cuda:1`.
 
+## Predicting on new compounds
+After the run is complete the model's **weights** and **conf** are saved under `models/` folder.
+We then can use `chembl_predict.py` to make predictions for new compounds as follows:
+```bash
+python chembl_predict.py \
+    --x new_compounds.mtx \
+    --outfile y_hat.npy \
+    --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05-conf.npy \
+    --model models/sc_chembl_h400.400_ldo0.2_wd1e-05.pt \
+    --dev cuda:0
+```
+where `new_compounds.mtx` is the sparse feature matrix of the new compounds and `--outfile y_hat.npy` specifies the file where the predictions are saved to.
+The `--conf` and `--model` should point to the configuration and model files that where saved during the training.
+
+The format for the prediction is a Numpy file that can be loaded as follows:
+```python
+import numpy as np
+y_hat = np.load("y_hat.npy")
+```
+The predictions themselves are class probabilities (values between 0.0 and 1.0).
 

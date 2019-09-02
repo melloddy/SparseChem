@@ -5,6 +5,8 @@ import pandas as pd
 import torch
 import tqdm
 import argparse
+import os
+import os.path
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -121,15 +123,10 @@ for epoch in range(args.epochs):
     print(f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}\taucs_tr={aucs_tr:.5f}\taucs_va={aucs_va:.5f}")
     scheduler.step()
 
-results_file = f"{name}.npy"
-results = {}
-results["conf"] = args
-results["results"] = {}
-results["results"]["va"] = {"aucs": aucs_va, "logloss": results_va['logloss']}
-results["results"]["tr"] = {"aucs": aucs_tr, "logloss": results_tr['logloss']}
+print("Saving performance metrics (AUCs) and model.")
 
-np.save(results_file, results)
-print(f"Saved results into '{results_file}'.")
+if not os.path.exists("results"):
+    os.makedirs("results")
 
 aucs = pd.DataFrame({
     "num_pos": num_pos,
@@ -138,7 +135,26 @@ aucs = pd.DataFrame({
     "auc_va":  results_va["aucs"],
 })
 
-aucs_file = f"{name}-aucs.csv"
+aucs_file = f"results/{name}-aucs.csv"
 aucs.to_csv(aucs_file)
-print(f"Saved metrics for each task into '{aucs_file}'.")
+print(f"Saved metrics (AUCs) for each task into '{aucs_file}'.")
 
+
+#####   model saving   #####
+model_file = f"models/{name}.pt"
+conf_file  = f"models/{name}-conf.npy"
+
+if not os.path.exists("models"):
+    os.makedirs("models")
+
+torch.save(net.state_dict(), model_file)
+print(f"Saved model weights into '{model_file}'.")
+
+results = {}
+results["conf"] = args
+results["results"] = {}
+results["results"]["va"] = {"aucs": aucs_va, "logloss": results_va['logloss']}
+results["results"]["tr"] = {"aucs": aucs_tr, "logloss": results_tr['logloss']}
+
+np.save(conf_file, results)
+print(f"Saved model conf into '{conf_file}'.")

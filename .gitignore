@@ -5,3 +5,4 @@ __pycache__
 *.png
 *.pdf
 *.npy
+*.pt

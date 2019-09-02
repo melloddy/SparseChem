@@ -64,6 +64,26 @@ def evaluate_binary(net, loader, loss, dev):
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 
+def predict(net, loader, dev):
+    """
+    Makes predictions for all compounds in the loader.
+    """
+    net.eval()
+
+    y_hat_list = []
+
+    with torch.no_grad():
+        for b in tqdm.tqdm(loader, leave=False):
+            X = torch.sparse_coo_tensor(
+                    b["x_ind"],
+                    b["x_data"],
+                    size = [b["batch_size"], loader.dataset.input_size]).to(dev)
+            y_hat = net(X)
+            y_hat_list.append(y_hat)
+
+        y_hat = torch.cat(y_hat_list, dim=0)
+        return y_hat
+
 def fold_inputs(x, folding_size, binarize=True):
     if x.shape[1] <= folding_size:
         return x

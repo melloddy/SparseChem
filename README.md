@@ -59,7 +59,7 @@ python chembl_train.py \
   --fold_va 0 \
   --batch_ratio    0.02 \
   --hidden_sizes   400 400 \
-  --weight_decay   1e-5 \
+  --weight_decay   1e-4 \
   --last_dropout   0.2 \
   --middle_dropout 0.2 \
   --epochs         20 \

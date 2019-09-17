@@ -8,22 +8,34 @@ import scipy.sparse
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def auc_roc(y_true, y_score):
+def all_metrics(y_true, y_score):
     if len(y_true) <= 1:
-        return np.nan
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan]})
+        return df
     if (y_true[0] == y_true).all():
-        return np.nan
-    return sklearn.metrics.roc_auc_score(
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan]})
+        return df
+    roc_auc_score = sklearn.metrics.roc_auc_score(
           y_true  = y_true,
           y_score = y_score)
+    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
+    with np.errstate(divide='ignore',invalid='ignore'): #sometimes precision and recall are both zero
+         F1_score = 2*(precision*recall)/(precision + recall)
+    max_f1_score = F1_score.max()
+    auc_pr = sklearn.metrics.auc(x = recall, y = precision)
+    avg_prec_score = sklearn.metrics.average_precision_score(
+          y_true  = y_true,
+          y_score = y_score)
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "max_f1_score": [max_f1_score]})
+    return df
 
-def compute_aucs(cols, y_true, y_score):
+def compute_metrics(cols, y_true, y_score):
     df   = pd.DataFrame({"col": cols, "y_true": y_true, "y_score": y_score})
-    aucs = df.groupby("col", sort=True).apply(lambda g:
-              auc_roc(
+    metrics = df.groupby("col", sort=True).apply(lambda g:
+              all_metrics(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values))
-    return aucs
+    return metrics
 
 def evaluate_binary(net, loader, loss, dev):
     net.eval()
@@ -57,10 +69,10 @@ def evaluate_binary(net, loader, loss, dev):
         y_ind  = torch.cat(y_ind_list, dim=1).cpu().numpy()
         y_true = torch.cat(y_true_list, dim=0).cpu().numpy()
         y_hat  = torch.cat(y_hat_list, dim=0).cpu().numpy()
-        aucs = compute_aucs(y_ind[1], y_true=y_true, y_score=y_hat)
+        metrics = compute_metrics(y_ind[1], y_true=y_true, y_score=y_hat)
 
         return {
-            'aucs':    aucs,
+            'metrics':    metrics,
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 

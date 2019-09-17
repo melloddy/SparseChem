@@ -125,11 +125,14 @@ for epoch in range(args.epochs):
     results_tr = sc.evaluate_binary(net, loader_tr, loss, dev)
 
     loss_tr = loss_sum / loss_count
-    aucs_tr = results_tr["aucs"].loc[auc_cols].mean()
-    aucs_va = results_va["aucs"].loc[auc_cols].mean()
-    print(f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}\taucs_tr={aucs_tr:.5f}\taucs_va={aucs_va:.5f}")
-    writer.add_scalar('aucs/tr', aucs_tr, epoch)
-    writer.add_scalar('aucs/va', aucs_va, epoch)
+    metrics_tr = results_tr['metrics'].loc[auc_cols].mean(0)
+    metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
+    output_fstr=f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}"
+    for metric_tr_name in metrics_tr.index:
+        output_fstr = f"{output_fstr}\t{metric_tr_name}_tr = {metrics_tr[metric_tr_name]:.5f}\t{metric_tr_name}_va = {metrics_va[metric_tr_name]:.5f}"
+        writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
+        writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
+    print(output_fstr)
     writer.add_scalar('logloss/tr', results_tr['logloss'], epoch)
     writer.add_scalar('logloss/va', results_va['logloss'], epoch)
     scheduler.step()
@@ -142,8 +145,8 @@ if not os.path.exists("results"):
 aucs = pd.DataFrame({
     "num_pos": num_pos,
     "num_neg": num_neg,
-    "auc_tr":  results_tr["aucs"],
-    "auc_va":  results_va["aucs"],
+    "auc_tr":  results_tr["metrics"]['roc_auc_score'],
+    "auc_va":  results_va["metrics"]['roc_auc_score'],
 })
 
 aucs_file = f"results/{name}-aucs.csv"

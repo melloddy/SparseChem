@@ -167,8 +167,8 @@ print(f"Saved model weights into '{model_file}'.")
 results = {}
 results["conf"] = args
 results["results"] = {}
-results["results"]["va"] = {"aucs": aucs_va, "logloss": results_va['logloss']}
-results["results"]["tr"] = {"aucs": aucs_tr, "logloss": results_tr['logloss']}
+results["results"]["va"] = {"aucs": aucs["auc_va"], "logloss": results_va['logloss']}
+results["results"]["tr"] = {"aucs": aucs["auc_tr"], "logloss": results_tr['logloss']}
 
 np.save(conf_file, results)
 print(f"Saved model conf into '{conf_file}'.")

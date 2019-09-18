@@ -23,6 +23,7 @@ parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0
 parser.add_argument("--weight_decay", help="Weight decay", type=float, default=0.0)
 parser.add_argument("--last_non_linearity", help="Last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
 parser.add_argument("--non_linearity", help="Before last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
+parser.add_argument("--input_transform", help="Transformation to apply to inputs", type=str, default="binarize", choices=["binarize", "none", "tanh"])
 parser.add_argument("--lr", help="Learning rate", type=float, default=1e-3)
 parser.add_argument("--lr_alpha", help="Learning rate decay multiplier", type=float, default=0.3)
 parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", type=int, default=[10])
@@ -56,6 +57,14 @@ assert ecfp.shape[0] == folding.shape[0]
 if args.fold_inputs is not None:
     ecfp = sc.fold_inputs(ecfp, folding_size=args.fold_inputs)
     print(f"Folding inputs to {ecfp.shape[1]} dimensions.")
+
+## Input transformation
+if args.input_transform == "binarize":
+    ecfp.data = (ecfp.data > 0).astype(np.float)
+elif args.input_transform == "tanh":
+    ecfp.data = np.tanh(ecfp.data)
+elif args.input_transform == "none":
+    pass
 
 num_pos  = np.array((ic50 == +1).sum(0)).flatten()
 num_neg  = np.array((ic50 == -1).sum(0)).flatten()

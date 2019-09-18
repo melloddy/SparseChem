@@ -107,7 +107,7 @@ for epoch in range(args.epochs):
     loss_sum   = 0.0
     loss_count = 0
 
-    for b in tqdm.tqdm(loader_tr):
+    for b in tqdm.tqdm(loader_tr, leave=False):
         optimizer.zero_grad()
         X      = torch.sparse_coo_tensor(
                     b["x_ind"],
@@ -136,12 +136,19 @@ for epoch in range(args.epochs):
     loss_tr = loss_sum / loss_count
     metrics_tr = results_tr['metrics'].loc[auc_cols].mean(0)
     metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
-    output_fstr=f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}"
+
+    if epoch % 20 == 0:
+        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va")
+    output_fstr = (
+        f"{epoch}.\t{results_tr['logloss']:.5f}  {results_va['logloss']:.5f}"
+        f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
+        f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
+    )
+    print(output_fstr)
     for metric_tr_name in metrics_tr.index:
-        output_fstr = f"{output_fstr}\t{metric_tr_name}_tr = {metrics_tr[metric_tr_name]:.5f}\t{metric_tr_name}_va = {metrics_va[metric_tr_name]:.5f}"
+        #output_fstr = f"{output_fstr}\t{metric_tr_name}_tr = {metrics_tr[metric_tr_name]:.5f}\t{metric_tr_name}_va = {metrics_va[metric_tr_name]:.5f}"
         writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
         writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
-    print(output_fstr)
     writer.add_scalar('logloss/tr', results_tr['logloss'], epoch)
     writer.add_scalar('logloss/va', results_va['logloss'], epoch)
     scheduler.step()

@@ -9,6 +9,7 @@ import os
 import os.path
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
+from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
 parser.add_argument("--x", help="Descriptor file (matrix market)", type=str, default="chembl_23_x.mtx")
@@ -30,13 +31,19 @@ parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
 parser.add_argument("--min_samples_auc", help="Minimum number samples for AUC calculation", type=int, default=25)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
+parser.add_argument("--filename", help="Filename for results", type=str, default=None)
 
 args = parser.parse_args()
 
 print(args)
-name = f"sc_chembl_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+if args.filename is not None:
+    name = args.filename
+else:
+    name = f"sc_chembl_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
 print(f"Run name is '{name}'.")
 
+tb_name = "runs/"+name
+writer = SummaryWriter(tb_name)
 assert args.input_size_freq is None, "Using tail compression not yet supported."
 
 ecfp    = scipy.io.mmread(args.x).tocsr()
@@ -118,9 +125,16 @@ for epoch in range(args.epochs):
     results_tr = sc.evaluate_binary(net, loader_tr, loss, dev)
 
     loss_tr = loss_sum / loss_count
-    aucs_tr = results_tr["aucs"].loc[auc_cols].mean()
-    aucs_va = results_va["aucs"].loc[auc_cols].mean()
-    print(f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}\taucs_tr={aucs_tr:.5f}\taucs_va={aucs_va:.5f}")
+    metrics_tr = results_tr['metrics'].loc[auc_cols].mean(0)
+    metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
+    output_fstr=f"Epoch {epoch}.\tloss_tr_live={loss_tr:.5f}\tloss_tr={results_tr['logloss']:.5f}\tloss_va={results_va['logloss']:.5f}"
+    for metric_tr_name in metrics_tr.index:
+        output_fstr = f"{output_fstr}\t{metric_tr_name}_tr = {metrics_tr[metric_tr_name]:.5f}\t{metric_tr_name}_va = {metrics_va[metric_tr_name]:.5f}"
+        writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
+        writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
+    print(output_fstr)
+    writer.add_scalar('logloss/tr', results_tr['logloss'], epoch)
+    writer.add_scalar('logloss/va', results_va['logloss'], epoch)
     scheduler.step()
 
 print("Saving performance metrics (AUCs) and model.")
@@ -131,8 +145,8 @@ if not os.path.exists("results"):
 aucs = pd.DataFrame({
     "num_pos": num_pos,
     "num_neg": num_neg,
-    "auc_tr":  results_tr["aucs"],
-    "auc_va":  results_va["aucs"],
+    "auc_tr":  results_tr["metrics"]['roc_auc_score'],
+    "auc_va":  results_va["metrics"]['roc_auc_score'],
 })
 
 aucs_file = f"results/{name}-aucs.csv"

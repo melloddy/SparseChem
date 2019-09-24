@@ -22,13 +22,13 @@ https://www.esat.kuleuven.be/~aarany/folding_hier_0.6.npy
 Then execute training:
 ```
 cd ./examples/chembl
-python chembl_train.py
+python train.py
 ```
 
 ## Specifying parameters of the network
 Single layer network with `400` hidden:
 ```
-python chembl_train.py \
+python train.py \
   --x ./chembl_23_x.mtx \
   --y ./chembl_23_y.mtx \
   --folding ./folding_hier_0.npy \
@@ -52,7 +52,7 @@ This should get us to 0.83 average AUC for tasks with 25 positives and 25 negati
 ## Two layer network
 To get a two layer network we just add several values to `--hidden_sizes`.
 ```
-python chembl_train.py \
+python train.py \
   --x ./chembl_23_x.mtx \
   --y ./chembl_23_y.mtx \
   --folding ./folding_hier_0.npy \
@@ -85,9 +85,9 @@ Similarly, to choose another GPU, we can specify `--dev cuda:1`.
 
 ## Predicting on new compounds
 After the run is complete the model's **weights** and **conf** are saved under `models/` folder.
-We then can use `chembl_predict.py` to make predictions for new compounds as follows:
+We then can use `predict.py` to make predictions for new compounds as follows:
 ```bash
-python chembl_predict.py \
+python predict.py \
     --x new_compounds.mtx \
     --outfile y_hat.npy \
     --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05-conf.npy \

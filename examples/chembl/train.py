@@ -33,6 +33,7 @@ parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
 parser.add_argument("--min_samples_auc", help="Minimum number samples for AUC calculation", type=int, default=25)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--filename", help="Filename for results", type=str, default=None)
+parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 
 args = parser.parse_args()
 
@@ -40,7 +41,7 @@ print(args)
 if args.filename is not None:
     name = args.filename
 else:
-    name = f"sc_chembl_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+    name = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
 print(f"Run name is '{name}'.")
 
 tb_name = "runs/"+name

@@ -139,11 +139,12 @@ for epoch in range(args.epochs):
     metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
 
     if epoch % 20 == 0:
-        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va")
+        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va ")
     output_fstr = (
         f"{epoch}.\t{results_tr['logloss']:.5f}  {results_va['logloss']:.5f}"
         f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
         f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
+        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
     )
     print(output_fstr)
     for metric_tr_name in metrics_tr.index:
@@ -164,11 +165,17 @@ aucs = pd.DataFrame({
     "num_neg": num_neg,
     "auc_tr":  results_tr["metrics"]['roc_auc_score'],
     "auc_va":  results_va["metrics"]['roc_auc_score'],
+    "auc_pr_tr":   results_tr["metrics"]["auc_pr"],
+    "auc_pr_va":   results_va["metrics"]["auc_pr"],
+    "avg_prec_tr": results_tr["metrics"]["avg_prec_score"],
+    "avg_prec_va": results_va["metrics"]["avg_prec_score"],
+    "max_f1_tr":   results_tr["metrics"]["max_f1_score"],
+    "max_f1_va":   results_va["metrics"]["max_f1_score"],
 })
 
-aucs_file = f"results/{name}-aucs.csv"
+aucs_file = f"results/{name}-metrics.csv"
 aucs.to_csv(aucs_file)
-print(f"Saved metrics (AUCs) for each task into '{aucs_file}'.")
+print(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
 
 
 #####   model saving   #####

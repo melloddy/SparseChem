@@ -19,8 +19,12 @@ def all_metrics(y_true, y_score):
           y_true  = y_true,
           y_score = y_score)
     precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
-    with np.errstate(divide='ignore',invalid='ignore'): #sometimes precision and recall are both zero
-         F1_score = 2*(precision*recall)/(precision + recall)
+
+    ## calculating F1 for all cutoffs
+    F1_score       = np.zeros(len(precision))
+    mask           = precision > 0
+    F1_score[mask] = 2 * (precision[mask] * recall[mask]) / (precision[mask] + recall[mask])
+
     max_f1_score = F1_score.max()
     auc_pr = sklearn.metrics.auc(x = recall, y = precision)
     avg_prec_score = sklearn.metrics.average_precision_score(
@@ -30,11 +34,12 @@ def all_metrics(y_true, y_score):
     return df
 
 def compute_metrics(cols, y_true, y_score):
-    df   = pd.DataFrame({"col": cols, "y_true": y_true, "y_score": y_score})
-    metrics = df.groupby("col", sort=True).apply(lambda g:
+    df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
+    metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values))
+    metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics
 
 def evaluate_binary(net, loader, loss, dev):
@@ -72,7 +77,7 @@ def evaluate_binary(net, loader, loss, dev):
         metrics = compute_metrics(y_ind[1], y_true=y_true, y_score=y_hat)
 
         return {
-            'metrics':    metrics,
+            'metrics': metrics,
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 

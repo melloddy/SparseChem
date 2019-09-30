@@ -31,7 +31,7 @@ Single layer network with `400` hidden:
 python train.py \
   --x ./chembl_23_x.mtx \
   --y ./chembl_23_y.mtx \
-  --folding ./folding_hier_0.npy \
+  --folding ./folding_hier_0.6.npy \
   --fold_va 0 \
   --batch_ratio    0.02 \
   --hidden_sizes   400 \
@@ -55,7 +55,7 @@ To get a two layer network we just add several values to `--hidden_sizes`.
 python train.py \
   --x ./chembl_23_x.mtx \
   --y ./chembl_23_y.mtx \
-  --folding ./folding_hier_0.npy \
+  --folding ./folding_hier_0.6.npy \
   --fold_va 0 \
   --batch_ratio    0.02 \
   --hidden_sizes   400 400 \

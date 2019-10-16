@@ -6,14 +6,15 @@ import torch
 import tqdm
 import argparse
 import os
+import sys
 import os.path
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
-parser.add_argument("--x", help="Descriptor file (matrix market)", type=str, default="chembl_23_x.mtx")
-parser.add_argument("--y", help="Activity file (matrix market)", type=str, default="chembl_23_y.mtx")
+parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default="chembl_23_x.mtx")
+parser.add_argument("--y", help="Activity file (matrix market or numpy)", type=str, default="chembl_23_y.mtx")
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
@@ -49,8 +50,24 @@ tb_name = "runs/"+name
 writer = SummaryWriter(tb_name)
 assert args.input_size_freq is None, "Using tail compression not yet supported."
 
-ecfp    = scipy.io.mmread(args.x).tocsr()
-ic50    = scipy.io.mmread(args.y).tocsr()
+if args.x.endswith('.mtx'):
+   ecfp    = scipy.io.mmread(args.x).tocsr()
+elif args.x.endswith('.npy'):
+   ecfp    = np.load(args.x, allow_pickle=True).item().tocsr()
+else:
+   parser.print_help()
+   print("--x: Descriptor file must have suffix .mtx or .npy")
+   sys.exit(1)
+
+if args.y.endswith('.mtx'):
+   ic50    = scipy.io.mmread(args.y).tocsr()
+elif args.y.endswith('.npy'):
+   ic50    = np.load(args.x, allow_pickle=True).item().tocsr()
+else:
+   parser.print_help()
+   print("--y: Activity file must have suffix .mtx or .npy")
+   sys.exit(1)
+
 folding = np.load(args.folding)
 
 assert ecfp.shape[0] == ic50.shape[0]

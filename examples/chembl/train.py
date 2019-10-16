@@ -16,6 +16,7 @@ parser.add_argument("--x", help="Descriptor file (matrix market)", type=str, def
 parser.add_argument("--y", help="Activity file (matrix market)", type=str, default="chembl_23_y.mtx")
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
+parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
@@ -75,6 +76,14 @@ print(f"There are {len(auc_cols)} columns for calculating mean AUC (i.e., have a
 print(f"Input dimension: {ecfp.shape[1]}")
 print(f"#samples:        {ecfp.shape[0]}")
 print(f"#tasks:          {ic50.shape[1]}")
+
+if args.fold_te is not None:
+    ## removing test data
+    assert args.fold_te != args.fold_va, "fold_va and fold_te must not be equal."
+    keep    = folding != fold_te
+    ecfp    = ecfp[keep]
+    ic50    = ic50[keep]
+    folding = folding[keep]
 
 fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]

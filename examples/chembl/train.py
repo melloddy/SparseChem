@@ -36,6 +36,7 @@ parser.add_argument("--min_samples_auc", help="Minimum number samples for AUC ca
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--filename", help="Filename for results", type=str, default=None)
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
+parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 
 args = parser.parse_args()
 
@@ -97,7 +98,7 @@ print(f"#tasks:          {ic50.shape[1]}")
 if args.fold_te is not None:
     ## removing test data
     assert args.fold_te != args.fold_va, "fold_va and fold_te must not be equal."
-    keep    = folding != fold_te
+    keep    = folding != args.fold_te
     ecfp    = ecfp[keep]
     ic50    = ic50[keep]
     folding = folding[keep]
@@ -208,11 +209,12 @@ print(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
 model_file = f"models/{name}.pt"
 conf_file  = f"models/{name}-conf.npy"
 
-if not os.path.exists("models"):
-    os.makedirs("models")
+if args.save_model == 1 :
+   if not os.path.exists("models"):
+       os.makedirs("models")
 
-torch.save(net.state_dict(), model_file)
-print(f"Saved model weights into '{model_file}'.")
+   torch.save(net.state_dict(), model_file)
+   print(f"Saved model weights into '{model_file}'.")
 
 results = {}
 results["conf"] = args

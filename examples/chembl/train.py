@@ -107,6 +107,9 @@ fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]
 idx_va  = np.where(folding == fold_va)[0]
 
+num_pos_va  = np.array((ic50[idx_va] == +1).sum(0)).flatten() 
+num_neg_va  = np.array((ic50[idx_va] == -1).sum(0)).flatten()
+
 batch_ratio = args.batch_ratio
 batch_size  = int(np.ceil(batch_ratio * idx_tr.shape[0]))
 
@@ -190,6 +193,8 @@ if not os.path.exists("results"):
 aucs = pd.DataFrame({
     "num_pos": num_pos,
     "num_neg": num_neg,
+    "num_pos_va": num_pos_va,
+    "num_neg_va": num_neg_va,
     "auc_tr":  results_tr["metrics"]['roc_auc_score'],
     "auc_va":  results_va["metrics"]['roc_auc_score'],
     "auc_pr_tr":   results_tr["metrics"]["auc_pr"],

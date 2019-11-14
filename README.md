@@ -80,10 +80,11 @@ This is useful for reducing the model size, without hurting the performance too 
 
 ## Task weighting
 Sparsechem also supports task weighting.
-This can be created by adding a `--task_weights weights.csv` option,
+This can be enabled by adding a `--task_weights weights.csv` option,
 where the file `weights.csv` should have two columns:
 * `task_id` integer from 0 to Ntasks - 1,
 * `weight` real value between 0.0 and 1.0 (inclusive).
+
 The number of weights in the CSV file must be equal to the number of tasks in `y` matrix.
 
 ## Running on CPU or other GPUs

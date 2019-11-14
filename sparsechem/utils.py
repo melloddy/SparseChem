@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import torch
 import scipy.sparse
+import scipy.io
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -126,4 +127,13 @@ def set_weights(net, filename="./tf_h400_inits.npy"):
         assert value.shape == param.shape
         param.data.copy_(torch.FloatTensor(value))
     print("Weights have been copied to Pytorch net.")
+
+
+def load_sparse(filename):
+    """Loads sparse from Matrix market or Numpy .npy file."""
+    if filename.endswith('.mtx'):
+       return scipy.io.mmread(filename).tocsr()
+    elif filename.endswith('.npy'):
+       return np.load(filename, allow_pickle=True).item().tocsr()
+    return None
 

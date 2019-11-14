@@ -7,13 +7,15 @@ class SparseDataset(Dataset):
     def __init__(self, x, y):
         '''
         Args:
-            X (sparse matrix): input [n_sampes, features_in]
-            Y (sparse matrix): output [n_samples, features_out]
+            X (sparse matrix):  input [n_sampes, features_in]
+            Y (sparse matrix):  output [n_samples, features_out]
+            task_weights (vec): task weights [features_out]
         '''
+        assert x.shape[0]==y.shape[0], f"Input has {x.shape[0]} rows, output has {y.shape[0]} rows."
+
         self.x = x.tocsr(copy=False).astype(np.float32)
         self.y = y.tocsr(copy=False).astype(np.float32)
 
-        assert self.x.shape[0]==self.y.shape[0], f"Input has {self.x.shape[0]} rows, output has {self.y.shape[0]} rows."
 
     def __len__(self):
         return(self.x.shape[0])

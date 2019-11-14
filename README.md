@@ -78,6 +78,15 @@ The pipeline also provides an option to fold inputs to a smaller size.
 For example, adding `--fold_inputs 20000` folds the inputs to 20,000 dimension.
 This is useful for reducing the model size, without hurting the performance too much.
 
+## Task weighting
+Sparsechem also supports task weighting.
+This can be enabled by adding a `--task_weights weights.csv` option,
+where the file `weights.csv` should have two columns:
+* `task_id` integer from 0 to Ntasks - 1,
+* `weight` real value between 0.0 and 1.0 (inclusive).
+
+The number of weights in the CSV file must be equal to the number of tasks in `y` matrix.
+
 ## Running on CPU or other GPUs
 The default device is `cuda:0`.
 To train the model on CPU just add `--dev cpu` to the arguments.

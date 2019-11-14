@@ -15,6 +15,7 @@ from tensorboardX import SummaryWriter
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default="chembl_23_x.mtx")
 parser.add_argument("--y", help="Activity file (matrix market or numpy)", type=str, default="chembl_23_y.mtx")
+parser.add_argument("--task_weights", help="CSV file with columns task_id and weight", type=str, default=None)
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
@@ -51,25 +52,42 @@ tb_name = "runs/"+name
 writer = SummaryWriter(tb_name)
 assert args.input_size_freq is None, "Using tail compression not yet supported."
 
-if args.x.endswith('.mtx'):
-   ecfp    = scipy.io.mmread(args.x).tocsr()
-elif args.x.endswith('.npy'):
-   ecfp    = np.load(args.x, allow_pickle=True).item().tocsr()
-else:
+ecfp = sc.load_sparse(args.x)
+if ecfp is None:
    parser.print_help()
    print("--x: Descriptor file must have suffix .mtx or .npy")
    sys.exit(1)
 
-if args.y.endswith('.mtx'):
-   ic50    = scipy.io.mmread(args.y).tocsr()
-elif args.y.endswith('.npy'):
-   ic50    = np.load(args.x, allow_pickle=True).item().tocsr()
-else:
+ic50 = sc.load_sparse(args.y)
+if ic50 is None:
    parser.print_help()
    print("--y: Activity file must have suffix .mtx or .npy")
    sys.exit(1)
 
 folding = np.load(args.folding)
+
+## Loading task weights
+if args.task_weights is not None:
+    tw_df = pd.read_csv(args.task_weights)
+    assert "task_id" in tw_df.columns, "task_id is missing in task weights CVS file"
+    assert "weight" in tw_df.columns, "weight is missing in task weights CVS file"
+    assert tw_df.shape[1] == 2, "Task weight file (CSV) must only have 2 columns"
+
+    assert ic50.shape[1] == tw_df.shape[0], "task weights have different size to y columns."
+    assert (0 <= tw_df.weight).all(), "task weights must not be negative"
+    assert (tw_df.weight <= 1).all(), "task weights must not be larger than 1.0"
+
+    assert tw_df.task_id.unique().shape[0] == tw_df.shape[0], "task ids are not all unique"
+    assert (0 <= tw_df.task_id).all(), "task ids in task weights must not be negative"
+    assert (tw_df.task_id < tw_df.shape[0]).all(), "task ids in task weights must be below number of tasks"
+    assert tw_df.shape[0]==ic50.shape[1], f"The number of task weights ({tw_df.shape[0]}) must be equal to the number of columns in Y ({ic50.shape[1]})."
+
+    tw_df.sort_values("task_id", inplace=True)
+    task_weights = tw_df.weight.values.astype(np.float32)
+else:
+    ## default weights are set to 1.0
+    task_weights = np.ones(ic50.shape[1], dtype=np.float32)
+
 
 assert ecfp.shape[0] == ic50.shape[0]
 assert ecfp.shape[0] == folding.shape[0]
@@ -132,6 +150,8 @@ print(net)
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
+task_weights = torch.from_numpy(task_weights).to(dev)
+
 for epoch in range(args.epochs):
     net.train()
 
@@ -144,14 +164,15 @@ for epoch in range(args.epochs):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], dataset_tr.input_size]).to(dev)
-        y_ind  = b["y_ind"].to(dev)
-        y_data = b["y_data"].to(dev)
-        y_data = (y_data + 1) / 2.0
+        y_ind   = b["y_ind"].to(dev)
+        y_w     = task_weights[y_ind[1]]
+        y_data  = b["y_data"].to(dev)
+        y_data  = (y_data + 1) / 2.0
 
         yhat_all = net(X)
         yhat     = yhat_all[y_ind[0], y_ind[1]]
         
-        output   = loss(yhat, y_data).sum()
+        output   = (loss(yhat, y_data) * y_w).sum()
         output_n = output / b["batch_size"]
 
         output_n.backward()
@@ -178,7 +199,6 @@ for epoch in range(args.epochs):
     )
     print(output_fstr)
     for metric_tr_name in metrics_tr.index:
-        #output_fstr = f"{output_fstr}\t{metric_tr_name}_tr = {metrics_tr[metric_tr_name]:.5f}\t{metric_tr_name}_va = {metrics_va[metric_tr_name]:.5f}"
         writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
         writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
     writer.add_scalar('logloss/tr', results_tr['logloss'], epoch)

@@ -8,6 +8,7 @@ import argparse
 import os
 import sys
 import os.path
+import time
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
@@ -158,6 +159,7 @@ for epoch in range(args.epochs):
     loss_sum   = 0.0
     loss_count = 0
 
+    t0 = time.time()
     for b in tqdm.tqdm(loader_tr, leave=False):
         optimizer.zero_grad()
         X      = torch.sparse_coo_tensor(
@@ -181,21 +183,27 @@ for epoch in range(args.epochs):
 
         loss_sum   += output.detach() / y_data.shape[0]
         loss_count += 1
+    t1 = time.time()
 
     results_va = sc.evaluate_binary(net, loader_va, loss, dev)
+    t2 = time.time()
     results_tr = sc.evaluate_binary(net, loader_tr, loss, dev)
 
     loss_tr = loss_sum / loss_count
     metrics_tr = results_tr['metrics'].loc[auc_cols].mean(0)
     metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
 
+    metrics_tr["epoch_time"] = t1 - t0
+    metrics_va["epoch_time"] = t2 - t1
+
     if epoch % 20 == 0:
-        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va ")
+        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
     output_fstr = (
         f"{epoch}.\t{results_tr['logloss']:.5f}  {results_va['logloss']:.5f}"
         f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
         f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
         f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
+        f" | {t1 - t0:6.1f}"
     )
     print(output_fstr)
     for metric_tr_name in metrics_tr.index:
@@ -231,21 +239,22 @@ print(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
 
 
 #####   model saving   #####
+if not os.path.exists("models"):
+   os.makedirs("models")
+
 model_file = f"models/{name}.pt"
 conf_file  = f"models/{name}-conf.npy"
 
 if args.save_model == 1 :
-   if not os.path.exists("models"):
-       os.makedirs("models")
-
    torch.save(net.state_dict(), model_file)
    print(f"Saved model weights into '{model_file}'.")
 
 results = {}
 results["conf"] = args
 results["results"] = {}
-results["results"]["va"] = {"aucs": aucs["auc_va"], "logloss": results_va['logloss']}
-results["results"]["tr"] = {"aucs": aucs["auc_tr"], "logloss": results_tr['logloss']}
+results["results"]["va"] = {"auc_roc": aucs["auc_va"], "auc_pr": aucs["auc_pr_va"], "logloss": results_va['logloss']}
+results["results"]["tr"] = {"auc_roc": aucs["auc_tr"], "auc_pr": aucs["auc_pr_tr"], "logloss": results_tr['logloss']}
+results["results_agg"]   = {"va": metrics_va, "tr": metrics_tr}
 
 np.save(conf_file, results)
-print(f"Saved model conf into '{conf_file}'.")
+print(f"Saved config and results into '{conf_file}'.")

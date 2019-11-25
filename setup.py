@@ -1,8 +1,10 @@
 import setuptools
 
+exec(open("sparsechem/version.py").read())
+
 setuptools.setup(
     name="sparsechem",
-    version="0.2.0",
+    version=__version__,
     author="Jaak Simm",
     author_email="jaak.simm@gmail.com",
     description="SparseChem package",

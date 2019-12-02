@@ -77,7 +77,7 @@ def sparse_collate(batch):
     return {
         "x_ind":  torch.LongTensor([xrow, xcol]),
         "x_data": torch.from_numpy(xv),
-        "y_ind":  torch.stack([torch.from_numpy(yrow), torch.from_numpy(ycol)], axis=0),
+        "y_ind":  torch.stack([torch.from_numpy(yrow), torch.from_numpy(ycol)], dim=0),
         "y_data": torch.from_numpy(np.concatenate(y_data)),
         "batch_size": len(batch),
     }

@@ -46,7 +46,9 @@ print(args)
 if args.filename is not None:
     name = args.filename
 else:
-    name = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+    name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
+    name += f"_fva{args.fold_va}_fte{args.fold_te}"
 print(f"Run name is '{name}'.")
 
 tb_name = "runs/"+name
@@ -213,6 +215,7 @@ for epoch in range(args.epochs):
     writer.add_scalar('logloss/va', results_va['logloss'], epoch)
     scheduler.step()
 
+writer.close()
 print("Saving performance metrics (AUCs) and model.")
 
 if not os.path.exists("results"):

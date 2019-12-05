@@ -82,6 +82,46 @@ def evaluate_binary(net, loader, loss, dev):
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 
+def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1):
+    net.train()
+    logloss_sum   = 0.0
+    logloss_count = 0
+
+    int_count = 0
+    for b in tqdm.tqdm(loader, leave=False):
+        if int_count == 0:
+            optimizer.zero_grad()
+
+        X       = torch.sparse_coo_tensor(
+                    b["x_ind"],
+                    b["x_data"],
+                    size = [b["batch_size"], loader.dataset.input_size]).to(dev)
+        y_ind   = b["y_ind"].to(dev)
+        y_w     = task_weights[y_ind[1]]
+        y_data  = b["y_data"].to(dev)
+        y_data  = (y_data + 1) / 2.0
+
+        yhat_all = net(X)
+        yhat     = yhat_all[y_ind[0], y_ind[1]]
+        
+        output   = (loss(yhat, y_data) * y_w).sum()
+        output_n = output / (b["batch_size"] * num_int_batches)
+
+        output_n.backward()
+
+        int_count += 1
+        if int_count == num_int_batches:
+            optimizer.step()
+            int_count = 0
+
+        logloss_sum   += output.detach() / y_data.shape[0]
+        logloss_count += 1
+
+    if int_count > 0:
+        ## process tail batch (should not happen)
+        optimizer.step()
+    return logloss_sum / logloss_count
+
 def predict(net, loader, dev):
     """
     Makes predictions for all compounds in the loader.

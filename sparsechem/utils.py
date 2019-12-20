@@ -10,11 +10,12 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def all_metrics(y_true, y_score):
+    y_classes = np.where(y_score > 0.5, 1, 0) 
     if len(y_true) <= 1:
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan], "kappa": [np.nan]})
         return df
     if (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan], "kappa": [np.nan]})
         return df
     roc_auc_score = sklearn.metrics.roc_auc_score(
           y_true  = y_true,
@@ -31,7 +32,8 @@ def all_metrics(y_true, y_score):
     avg_prec_score = sklearn.metrics.average_precision_score(
           y_true  = y_true,
           y_score = y_score)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "max_f1_score": [max_f1_score]})
+    kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "max_f1_score": [max_f1_score], "kappa": [kappa]})
     return df
 
 def compute_metrics(cols, y_true, y_score):

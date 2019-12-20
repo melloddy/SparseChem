@@ -234,6 +234,8 @@ aucs = pd.DataFrame({
     "avg_prec_va": results_va["metrics"]["avg_prec_score"],
     "max_f1_tr":   results_tr["metrics"]["max_f1_score"],
     "max_f1_va":   results_va["metrics"]["max_f1_score"],
+    "kappa_tr":    results_tr["metrics"]["kappa"],
+    "kappa_va":    results_va["metrics"]["kappa"],
 })
 
 aucs_file = f"results/{name}-metrics.csv"

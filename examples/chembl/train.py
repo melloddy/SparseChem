@@ -21,6 +21,7 @@ parser.add_argument("--folding", help="Folding file (npy)", type=str, default="f
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
+parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
@@ -131,8 +132,14 @@ idx_va  = np.where(folding == fold_va)[0]
 num_pos_va  = np.array((ic50[idx_va] == +1).sum(0)).flatten() 
 num_neg_va  = np.array((ic50[idx_va] == -1).sum(0)).flatten()
 
-batch_ratio = args.batch_ratio
-batch_size  = int(np.ceil(batch_ratio * idx_tr.shape[0]))
+batch_size  = int(np.ceil(args.batch_ratio * idx_tr.shape[0]))
+num_int_batches = 1
+
+if args.internal_batch_max is not None:
+    if args.internal_batch_max < batch_size:
+        num_int_batches = int(np.ceil(batch_size / args.internal_batch_max))
+        batch_size      = int(np.ceil(batch_size / num_int_batches))
+print(f"#internal batch size:   {batch_size}")
 
 dataset_tr = sc.SparseDataset(x=ecfp[idx_tr], y=ic50[idx_tr])
 dataset_va = sc.SparseDataset(x=ecfp[idx_va], y=ic50[idx_va])
@@ -156,42 +163,17 @@ scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha
 task_weights = torch.from_numpy(task_weights).to(dev)
 
 for epoch in range(args.epochs):
-    net.train()
-
-    loss_sum   = 0.0
-    loss_count = 0
-
     t0 = time.time()
-    for b in tqdm.tqdm(loader_tr, leave=False):
-        optimizer.zero_grad()
-        X      = torch.sparse_coo_tensor(
-                    b["x_ind"],
-                    b["x_data"],
-                    size = [b["batch_size"], dataset_tr.input_size]).to(dev)
-        y_ind   = b["y_ind"].to(dev)
-        y_w     = task_weights[y_ind[1]]
-        y_data  = b["y_data"].to(dev)
-        y_data  = (y_data + 1) / 2.0
+    loss_tr = sc.train_binary(
+            net, optimizer, loader_tr, loss, dev,
+            task_weights    = task_weights,
+            num_int_batches = num_int_batches)
 
-        yhat_all = net(X)
-        yhat     = yhat_all[y_ind[0], y_ind[1]]
-        
-        output   = (loss(yhat, y_data) * y_w).sum()
-        output_n = output / b["batch_size"]
-
-        output_n.backward()
-
-        optimizer.step()
-
-        loss_sum   += output.detach() / y_data.shape[0]
-        loss_count += 1
     t1 = time.time()
-
     results_va = sc.evaluate_binary(net, loader_va, loss, dev)
     t2 = time.time()
     results_tr = sc.evaluate_binary(net, loader_tr, loss, dev)
 
-    loss_tr = loss_sum / loss_count
     metrics_tr = results_tr['metrics'].loc[auc_cols].mean(0)
     metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
 

@@ -42,7 +42,7 @@ print(f"#samples:        {ecfp.shape[0]}")
 
 dev  = args.dev
 net  = sc.SparseFFN(conf).to(dev)
-net.load_state_dict(torch.load(args.model))
+net.load_state_dict(torch.load(args.model, map_location=torch.device(dev)))
 print(f"Model weights:   '{args.model}'")
 print(f"Model config:    '{args.conf}'.")
 

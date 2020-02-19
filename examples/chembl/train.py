@@ -174,8 +174,8 @@ for epoch in range(args.epochs):
     t2 = time.time()
     results_tr = sc.evaluate_binary(net, loader_tr, loss, dev)
 
-    metrics_tr = results_tr['metrics'].loc[auc_cols].mean(0)
-    metrics_va = results_va['metrics'].loc[auc_cols].mean(0)
+    metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
+    metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
 
     metrics_tr["epoch_time"] = t1 - t0
     metrics_va["epoch_time"] = t2 - t1

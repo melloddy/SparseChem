@@ -70,13 +70,13 @@ def evaluate_binary(net, loader, loss, dev):
             logloss_count += y_data.shape[0]
 
             ## storing data for AUCs
-            y_ind_list.append(y_ind)
-            y_true_list.append(y_data)
-            y_hat_list.append(y_hat)
+            y_ind_list.append(y_ind.cpu())
+            y_true_list.append(y_data.cpu())
+            y_hat_list.append(y_hat.cpu())
 
-        y_ind  = torch.cat(y_ind_list, dim=1).cpu().numpy()
-        y_true = torch.cat(y_true_list, dim=0).cpu().numpy()
-        y_hat  = torch.cat(y_hat_list, dim=0).cpu().numpy()
+        y_ind  = torch.cat(y_ind_list, dim=1).numpy()
+        y_true = torch.cat(y_true_list, dim=0).numpy()
+        y_hat  = torch.cat(y_hat_list, dim=0).numpy()
         metrics = compute_metrics(y_ind[1], y_true=y_true, y_score=y_hat)
 
         return {

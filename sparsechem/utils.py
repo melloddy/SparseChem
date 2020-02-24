@@ -1,5 +1,5 @@
 import sklearn.metrics
-import tqdm
+from tqdm.auto import tqdm
 import pandas as pd
 import numpy as np
 import torch
@@ -45,7 +45,7 @@ def compute_metrics(cols, y_true, y_score):
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics
 
-def evaluate_binary(net, loader, loss, dev):
+def evaluate_binary(net, loader, loss, dev, progress=True):
     net.eval()
     logloss_sum   = 0.0
     logloss_count = 0
@@ -54,7 +54,7 @@ def evaluate_binary(net, loader, loss, dev):
     y_hat_list    = []
 
     with torch.no_grad():
-        for b in tqdm.tqdm(loader, leave=False):
+        for b in tqdm(loader, leave=False, disable=(progress == False)):
             X = torch.sparse_coo_tensor(
                     b["x_ind"],
                     b["x_data"],
@@ -84,13 +84,13 @@ def evaluate_binary(net, loader, loss, dev):
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 
-def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1):
+def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1, progress=True):
     net.train()
     logloss_sum   = 0.0
     logloss_count = 0
 
     int_count = 0
-    for b in tqdm.tqdm(loader, leave=False):
+    for b in tqdm(loader, leave=False, disable=(progress == False)):
         if int_count == 0:
             optimizer.zero_grad()
 
@@ -124,7 +124,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
         optimizer.step()
     return logloss_sum / logloss_count
 
-def predict(net, loader, dev):
+def predict(net, loader, dev, progress=True):
     """
     Makes predictions for all compounds in the loader.
     """
@@ -133,7 +133,7 @@ def predict(net, loader, dev):
     y_hat_list = []
 
     with torch.no_grad():
-        for b in tqdm.tqdm(loader, leave=False):
+        for b in tqdm(loader, leave=False, disable=(progress == False)):
             X = torch.sparse_coo_tensor(
                     b["x_ind"],
                     b["x_data"],

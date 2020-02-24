@@ -39,18 +39,24 @@ parser.add_argument("--min_samples_auc", help="Minimum number samples for AUC ca
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--filename", help="Filename for results", type=str, default=None)
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
+parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 
 args = parser.parse_args()
 
-print(args)
+def vprint(s):
+    if args.verbose:
+        print(s)
+
+vprint(args)
+
 if args.filename is not None:
     name = args.filename
 else:
     name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
-print(f"Run name is '{name}'.")
+vprint(f"Run name is '{name}'.")
 
 tb_name = "runs/"+name
 writer = SummaryWriter(tb_name)
@@ -59,13 +65,13 @@ assert args.input_size_freq is None, "Using tail compression not yet supported."
 ecfp = sc.load_sparse(args.x)
 if ecfp is None:
    parser.print_help()
-   print("--x: Descriptor file must have suffix .mtx or .npy")
+   vprint("--x: Descriptor file must have suffix .mtx or .npy")
    sys.exit(1)
 
 ic50 = sc.load_sparse(args.y)
 if ic50 is None:
    parser.print_help()
-   print("--y: Activity file must have suffix .mtx or .npy")
+   vprint("--y: Activity file must have suffix .mtx or .npy")
    sys.exit(1)
 
 folding = np.load(args.folding)
@@ -98,7 +104,7 @@ assert ecfp.shape[0] == folding.shape[0]
 
 if args.fold_inputs is not None:
     ecfp = sc.fold_inputs(ecfp, folding_size=args.fold_inputs)
-    print(f"Folding inputs to {ecfp.shape[1]} dimensions.")
+    vprint(f"Folding inputs to {ecfp.shape[1]} dimensions.")
 
 ## Input transformation
 if args.input_transform == "binarize":
@@ -112,10 +118,10 @@ num_pos  = np.array((ic50 == +1).sum(0)).flatten()
 num_neg  = np.array((ic50 == -1).sum(0)).flatten()
 auc_cols = np.where((num_pos >= args.min_samples_auc) & (num_neg >= args.min_samples_auc))[0]
 
-print(f"There are {len(auc_cols)} columns for calculating mean AUC (i.e., have at least {args.min_samples_auc} positives and {args.min_samples_auc} negatives).")
-print(f"Input dimension: {ecfp.shape[1]}")
-print(f"#samples:        {ecfp.shape[0]}")
-print(f"#tasks:          {ic50.shape[1]}")
+vprint(f"There are {len(auc_cols)} columns for calculating mean AUC (i.e., have at least {args.min_samples_auc} positives and {args.min_samples_auc} negatives).")
+vprint(f"Input dimension: {ecfp.shape[1]}")
+vprint(f"#samples:        {ecfp.shape[0]}")
+vprint(f"#tasks:          {ic50.shape[1]}")
 
 if args.fold_te is not None:
     ## removing test data
@@ -139,7 +145,7 @@ if args.internal_batch_max is not None:
     if args.internal_batch_max < batch_size:
         num_int_batches = int(np.ceil(batch_size / args.internal_batch_max))
         batch_size      = int(np.ceil(batch_size / num_int_batches))
-print(f"#internal batch size:   {batch_size}")
+vprint(f"#internal batch size:   {batch_size}")
 
 dataset_tr = sc.SparseDataset(x=ecfp[idx_tr], y=ic50[idx_tr])
 dataset_va = sc.SparseDataset(x=ecfp[idx_va], y=ic50[idx_va])
@@ -154,8 +160,8 @@ dev  = args.dev
 net  = sc.SparseFFN(args).to(dev)
 loss = torch.nn.BCEWithLogitsLoss(reduction="none")
 
-print("Network:")
-print(net)
+vprint("Network:")
+vprint(net)
 
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
@@ -165,14 +171,15 @@ task_weights = torch.from_numpy(task_weights).to(dev)
 for epoch in range(args.epochs):
     t0 = time.time()
     loss_tr = sc.train_binary(
-            net, optimizer, loader_tr, loss, dev,
-            task_weights    = task_weights,
-            num_int_batches = num_int_batches)
+        net, optimizer, loader_tr, loss, dev,
+        task_weights    = task_weights,
+        num_int_batches = num_int_batches,
+        progress        = args.verbose >= 2)
 
     t1 = time.time()
-    results_va = sc.evaluate_binary(net, loader_va, loss, dev)
+    results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
     t2 = time.time()
-    results_tr = sc.evaluate_binary(net, loader_tr, loss, dev)
+    results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
 
     metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
     metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
@@ -181,7 +188,7 @@ for epoch in range(args.epochs):
     metrics_va["epoch_time"] = t2 - t1
 
     if epoch % 20 == 0:
-        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
+        vprint("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
     output_fstr = (
         f"{epoch}.\t{results_tr['logloss']:.5f}  {results_va['logloss']:.5f}"
         f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
@@ -189,7 +196,7 @@ for epoch in range(args.epochs):
         f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
         f" | {t1 - t0:6.1f}"
     )
-    print(output_fstr)
+    vprint(output_fstr)
     for metric_tr_name in metrics_tr.index:
         writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
         writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
@@ -198,7 +205,7 @@ for epoch in range(args.epochs):
     scheduler.step()
 
 writer.close()
-print("Saving performance metrics (AUCs) and model.")
+vprint("Saving performance metrics (AUCs) and model.")
 
 if not os.path.exists("results"):
     os.makedirs("results")
@@ -222,7 +229,7 @@ aucs = pd.DataFrame({
 
 aucs_file = f"results/{name}-metrics.csv"
 aucs.to_csv(aucs_file)
-print(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
+vprint(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
 
 
 #####   model saving   #####
@@ -234,7 +241,7 @@ conf_file  = f"models/{name}-conf.npy"
 
 if args.save_model == 1 :
    torch.save(net.state_dict(), model_file)
-   print(f"Saved model weights into '{model_file}'.")
+   vprint(f"Saved model weights into '{model_file}'.")
 
 results = {}
 results["conf"] = args
@@ -244,4 +251,4 @@ results["results"]["tr"] = {"auc_roc": aucs["auc_tr"], "auc_pr": aucs["auc_pr_tr
 results["results_agg"]   = {"va": metrics_va, "tr": metrics_tr}
 
 np.save(conf_file, results)
-print(f"Saved config and results into '{conf_file}'.")
+vprint(f"Saved config and results into '{conf_file}'.")

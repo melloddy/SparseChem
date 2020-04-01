@@ -45,6 +45,32 @@ def compute_metrics(cols, y_true, y_score):
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics
 
+def print_metrics(epoch, train_time, metrics_tr, metrics_va):
+    if metrics_tr is None:
+        if epoch % 20 == 0:
+            print("Epoch\tlogl_va |  auc_va | aucpr_va | maxf1_va | tr_time")
+        output_fstr = (
+            f"{epoch}.\t{metrics_va['logloss']:.5f}"
+            f" | {metrics_va['roc_auc_score']:.5f}"
+            f" |  {metrics_va['auc_pr']:.5f}"
+            f" |  {metrics_va['max_f1_score']:.5f}"
+            f" | {train_time:6.1f}"
+        )
+        print(output_fstr)
+        return
+
+    ## full print
+    if epoch % 20 == 0:
+        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
+    output_fstr = (
+        f"{epoch}.\t{metrics_tr['logloss']:.5f}  {metrics_va['logloss']:.5f}"
+        f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
+        f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
+        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
+        f" | {train_time:6.1f}"
+    )
+    print(output_fstr)
+
 def evaluate_binary(net, loader, loss, dev, progress=True):
     net.eval()
     logloss_sum   = 0.0

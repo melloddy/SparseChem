@@ -41,6 +41,7 @@ parser.add_argument("--filename", help="Filename for results", type=str, default
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
+parser.add_argument("--eval_train", help="Set this to 0 if train data should not be evaluated", type=int, default=1)
 
 args = parser.parse_args()
 
@@ -179,29 +180,26 @@ for epoch in range(args.epochs):
     t1 = time.time()
     results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
     t2 = time.time()
-    results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
 
-    metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
+    if args.eval_train:
+        results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
+        metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
+        metrics_tr["epoch_time"] = t1 - t0
+        metrics_tr["logloss"]    = results_tr['logloss']
+        for metric_tr_name in metrics_tr.index:
+            writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
+    else:
+        metrics_tr = None
+
     metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
-
-    metrics_tr["epoch_time"] = t1 - t0
     metrics_va["epoch_time"] = t2 - t1
+    metrics_va["logloss"]    = results_va["logloss"]
+    for metric_va_name in metrics_va.index:
+        writer.add_scalar(metric_va_name+"/va", metrics_va[metric_va_name], epoch)
 
-    if epoch % 20 == 0:
-        vprint("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
-    output_fstr = (
-        f"{epoch}.\t{results_tr['logloss']:.5f}  {results_va['logloss']:.5f}"
-        f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
-        f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
-        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
-        f" | {t1 - t0:6.1f}"
-    )
-    vprint(output_fstr)
-    for metric_tr_name in metrics_tr.index:
-        writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
-        writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
-    writer.add_scalar('logloss/tr', results_tr['logloss'], epoch)
-    writer.add_scalar('logloss/va', results_va['logloss'], epoch)
+    if args.verbose:
+        sc.print_metrics(epoch, t1 - t0, metrics_tr, metrics_va)
+
     scheduler.step()
 
 writer.close()

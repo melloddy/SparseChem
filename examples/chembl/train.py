@@ -43,10 +43,11 @@ parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 parser.add_argument("--eval_train", help="Set this to 0 if train data should not be evaluated", type=int, default=1)
+parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 
 args = parser.parse_args()
 
-def vprint(s):
+def vprint(s=""):
     if args.verbose:
         print(s)
 
@@ -170,6 +171,8 @@ scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha
 
 task_weights = torch.from_numpy(task_weights).to(dev)
 
+num_prints = 0
+
 for epoch in range(args.epochs):
     t0 = time.time()
     loss_tr = sc.train_binary(
@@ -179,32 +182,40 @@ for epoch in range(args.epochs):
         progress        = args.verbose >= 2)
 
     t1 = time.time()
-    results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
-    t2 = time.time()
 
-    if args.eval_train:
-        results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
-        metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
-        metrics_tr["epoch_time"] = t1 - t0
-        metrics_tr["logloss"]    = results_tr['logloss']
-        for metric_tr_name in metrics_tr.index:
-            writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
-    else:
-        results_tr = None
-        metrics_tr = None
+    eval_round = (args.eval_frequency > 0) and ((epoch + 1) % args.eval_frequency == 0)
+    last_round = epoch == args.epochs - 1
 
-    metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
-    metrics_va["epoch_time"] = t2 - t1
-    metrics_va["logloss"]    = results_va["logloss"]
-    for metric_va_name in metrics_va.index:
-        writer.add_scalar(metric_va_name+"/va", metrics_va[metric_va_name], epoch)
+    if eval_round or last_round:
+        results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
+        t2 = time.time()
 
-    if args.verbose:
-        sc.print_metrics(epoch, t1 - t0, metrics_tr, metrics_va)
+        if args.eval_train:
+            results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
+            metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
+            metrics_tr["epoch_time"] = t1 - t0
+            metrics_tr["logloss"]    = results_tr['logloss']
+            for metric_tr_name in metrics_tr.index:
+                writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
+        else:
+            results_tr = None
+            metrics_tr = None
+
+        metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
+        metrics_va["epoch_time"] = t2 - t1
+        metrics_va["logloss"]    = results_va["logloss"]
+        for metric_va_name in metrics_va.index:
+            writer.add_scalar(metric_va_name+"/va", metrics_va[metric_va_name], epoch)
+
+        if args.verbose:
+            header = num_prints % 20 == 0
+            num_prints += 1
+            sc.print_metrics(epoch, t1 - t0, metrics_tr, metrics_va, header)
 
     scheduler.step()
 
 writer.close()
+vprint()
 vprint("Saving performance metrics (AUCs) and model.")
 
 #####   model saving   #####
@@ -237,4 +248,4 @@ if args.eval_train:
 with open(out_file, "w") as f:
     json.dump(out, f)
 
-vprint(f"Saved config and results into '{out_file}'.\nYou can load them by:\n  sparsechem.load_results('{out_file}')")
+vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  res = sparsechem.load_results('{out_file}')")

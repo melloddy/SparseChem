@@ -47,9 +47,9 @@ def compute_metrics(cols, y_true, y_score):
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics
 
-def print_metrics(epoch, train_time, metrics_tr, metrics_va):
+def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     if metrics_tr is None:
-        if epoch % 20 == 0:
+        if header:
             print("Epoch\tlogl_va |  auc_va | aucpr_va | maxf1_va | tr_time")
         output_fstr = (
             f"{epoch}.\t{metrics_va['logloss']:.5f}"
@@ -62,7 +62,7 @@ def print_metrics(epoch, train_time, metrics_tr, metrics_va):
         return
 
     ## full print
-    if epoch % 20 == 0:
+    if header:
         print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
     output_fstr = (
         f"{epoch}.\t{metrics_tr['logloss']:.5f}  {metrics_va['logloss']:.5f}"

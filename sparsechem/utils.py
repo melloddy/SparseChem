@@ -5,6 +5,8 @@ import numpy as np
 import torch
 import scipy.sparse
 import scipy.io
+import types
+import json
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -205,3 +207,26 @@ def load_sparse(filename):
        return np.load(filename, allow_pickle=True).item().tocsr()
     return None
 
+def load_results(filename):
+    """Loads conf and results from a file
+    Args:
+        filename    name of the json/npy file
+        only_conf   only load the configuration
+    """
+    if filename.endswith(".npy"):
+        return np.load(filename, allow_pickle=True).item()
+
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    data["conf"] = types.SimpleNamespace(**data["conf"])
+
+    if "results" in data:
+        for key in data["results"]:
+            data["results"][key] = pd.read_json(data["results"][key])
+
+    if "results_agg" in data:
+        for key in data["results_agg"]:
+            data["results_agg"][key] = pd.read_json(data["results_agg"][key], typ="series")
+
+    return data

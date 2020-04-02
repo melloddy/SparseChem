@@ -9,6 +9,7 @@ import os
 import sys
 import os.path
 import time
+import json
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
@@ -189,6 +190,7 @@ for epoch in range(args.epochs):
         for metric_tr_name in metrics_tr.index:
             writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
     else:
+        results_tr = None
         metrics_tr = None
 
     metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
@@ -205,48 +207,34 @@ for epoch in range(args.epochs):
 writer.close()
 vprint("Saving performance metrics (AUCs) and model.")
 
-if not os.path.exists("results"):
-    os.makedirs("results")
-
-aucs = pd.DataFrame({
-    "num_pos": num_pos,
-    "num_neg": num_neg,
-    "num_pos_va": num_pos_va,
-    "num_neg_va": num_neg_va,
-    "auc_tr":  results_tr["metrics"]['roc_auc_score'],
-    "auc_va":  results_va["metrics"]['roc_auc_score'],
-    "auc_pr_tr":   results_tr["metrics"]["auc_pr"],
-    "auc_pr_va":   results_va["metrics"]["auc_pr"],
-    "avg_prec_tr": results_tr["metrics"]["avg_prec_score"],
-    "avg_prec_va": results_va["metrics"]["avg_prec_score"],
-    "max_f1_tr":   results_tr["metrics"]["max_f1_score"],
-    "max_f1_va":   results_va["metrics"]["max_f1_score"],
-    "kappa_tr":    results_tr["metrics"]["kappa"],
-    "kappa_va":    results_va["metrics"]["kappa"],
-})
-
-aucs_file = f"results/{name}-metrics.csv"
-aucs.to_csv(aucs_file)
-vprint(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
-
-
 #####   model saving   #####
 if not os.path.exists("models"):
    os.makedirs("models")
 
 model_file = f"models/{name}.pt"
-conf_file  = f"models/{name}-conf.npy"
+out_file   = f"models/{name}.json"
 
-if args.save_model == 1 :
+if args.save_model:
    torch.save(net.state_dict(), model_file)
    vprint(f"Saved model weights into '{model_file}'.")
 
-results = {}
-results["conf"] = args
-results["results"] = {}
-results["results"]["va"] = {"auc_roc": aucs["auc_va"], "auc_pr": aucs["auc_pr_va"], "logloss": results_va['logloss']}
-results["results"]["tr"] = {"auc_roc": aucs["auc_tr"], "auc_pr": aucs["auc_pr_tr"], "logloss": results_tr['logloss']}
-results["results_agg"]   = {"va": metrics_va, "tr": metrics_tr}
+## adding positive and negative numbers
+results_va["metrics"]["num_pos"] = num_pos_va
+results_va["metrics"]["num_neg"] = num_neg_va
 
-np.save(conf_file, results)
-vprint(f"Saved config and results into '{conf_file}'.")
+out = {}
+out["conf"]        = args.__dict__
+out["results"]     = {"va": results_va["metrics"].to_json()}
+out["results_agg"] = {"va": metrics_va.to_json()}
+
+if args.eval_train:
+    results_tr["metrics"]["num_pos"] = num_pos - num_pos_va
+    results_tr["metrics"]["num_neg"] = num_neg - num_neg_va
+
+    out["results"]["tr"]     = results_tr["metrics"].to_json()
+    out["results_agg"]["tr"] = metrics_tr.to_json()
+
+with open(out_file, "w") as f:
+    json.dump(out, f)
+
+vprint(f"Saved config and results into '{out_file}'.\nYou can load them by:\n  sparsechem.load_results('{out_file}')")

@@ -152,8 +152,11 @@ class SparseFFN(torch.nn.Module):
             LastNet(conf),
         )
 
-
     def forward(self, X):
         return self.net(X)
 
+    def last_hidden(self, X):
+        """Returns the values for the last hidden for the input X."""
+        H = self.net[:-1](X)
+        return self.net[-1].net[:-1](H)
 

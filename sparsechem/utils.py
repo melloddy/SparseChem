@@ -152,7 +152,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
         optimizer.step()
     return logloss_sum / logloss_count
 
-def predict(net, loader, dev, progress=True):
+def predict(net, loader, dev, last_hidden=False, progress=True):
     """
     Makes predictions for all compounds in the loader.
     """
@@ -166,8 +166,8 @@ def predict(net, loader, dev, progress=True):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            y_hat = net(X)
-            y_hat_list.append(y_hat)
+            y_hat = net(X, last_hidden=last_hidden)
+            y_hat_list.append(y_hat.cpu())
 
         y_hat = torch.cat(y_hat_list, dim=0)
         return y_hat

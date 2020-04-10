@@ -42,7 +42,7 @@ parser.add_argument("--filename", help="Filename for results", type=str, default
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
-parser.add_argument("--eval_train", help="Set this to 0 if train data should not be evaluated", type=int, default=1)
+parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 
 args = parser.parse_args()

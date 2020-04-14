@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 import numpy as np
 
 def folding_rows(num_rows, train_size):

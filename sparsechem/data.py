@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 from torch.utils.data import Dataset
 import torch
 import scipy.sparse

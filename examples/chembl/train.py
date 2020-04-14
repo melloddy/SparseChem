@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 import sparsechem as sc
 import scipy.io
 import numpy as np

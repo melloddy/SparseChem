@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 import sparsechem as sc
 import scipy.io
 import scipy.sparse
@@ -16,6 +17,8 @@ parser.add_argument("--outfile", help="Output file for predictions (.npy)", type
 parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
+parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
+parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluation", type=int, default=0)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
 
 args = parser.parse_args()
@@ -46,8 +49,12 @@ print(f"Model config:    '{args.conf}'.")
 y0         = scipy.sparse.coo_matrix((ecfp.shape[0], conf.output_size), np.float32).tocsr()
 dataset_te = sc.SparseDataset(x=ecfp, y=y0)
 loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
-y_hat      = torch.sigmoid(sc.predict(net, loader_te, dev)).cpu().numpy()
 
-np.save(args.outfile, y_hat)
+out = sc.predict(net, loader_te, dev, last_hidden=args.last_hidden, dropout=args.dropout)
+if args.last_hidden == 0:
+    out = torch.sigmoid(out)
+out = out.numpy()
+
+np.save(args.outfile, out)
 print(f"Saved prediction matrix (numpy) to '{args.outfile}'.")
 

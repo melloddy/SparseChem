@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 import torch
 import math
 from torch import nn
@@ -152,8 +153,9 @@ class SparseFFN(torch.nn.Module):
             LastNet(conf),
         )
 
-
-    def forward(self, X):
+    def forward(self, X, last_hidden=False):
+        if last_hidden:
+            H = self.net[:-1](X)
+            return self.net[-1].net[:-1](H)
         return self.net(X)
-
 

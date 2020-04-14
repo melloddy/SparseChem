@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 import sklearn.metrics
 from tqdm.auto import tqdm
 import pandas as pd
@@ -152,11 +153,17 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
         optimizer.step()
     return logloss_sum / logloss_count
 
-def predict(net, loader, dev, progress=True):
+def enable_dropout(m):
+    if type(m) == torch.nn.Dropout:
+        m.train()
+
+def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
     """
     Makes predictions for all compounds in the loader.
     """
     net.eval()
+    if dropout:
+        net.apply(enable_dropout)
 
     y_hat_list = []
 
@@ -166,8 +173,8 @@ def predict(net, loader, dev, progress=True):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            y_hat = net(X)
-            y_hat_list.append(y_hat)
+            y_hat = net(X, last_hidden=last_hidden)
+            y_hat_list.append(y_hat.cpu())
 
         y_hat = torch.cat(y_hat_list, dim=0)
         return y_hat

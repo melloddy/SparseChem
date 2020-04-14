@@ -1,3 +1,4 @@
+# Copyright (c) 2020 KU Leuven
 import setuptools
 
 exec(open("sparsechem/version.py").read())

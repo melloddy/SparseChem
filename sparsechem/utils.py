@@ -152,11 +152,17 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
         optimizer.step()
     return logloss_sum / logloss_count
 
-def predict(net, loader, dev, last_hidden=False, progress=True):
+def enable_dropout(m):
+    if type(m) == torch.nn.Dropout:
+        m.train()
+
+def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
     """
     Makes predictions for all compounds in the loader.
     """
     net.eval()
+    if dropout:
+        net.apply(enable_dropout)
 
     y_hat_list = []
 

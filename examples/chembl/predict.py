@@ -17,6 +17,7 @@ parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, 
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
 parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
+parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluation", type=int, default=0)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
 
 args = parser.parse_args()
@@ -48,7 +49,7 @@ y0         = scipy.sparse.coo_matrix((ecfp.shape[0], conf.output_size), np.float
 dataset_te = sc.SparseDataset(x=ecfp, y=y0)
 loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
 
-out = sc.predict(net, loader_te, dev, last_hidden=args.last_hidden)
+out = sc.predict(net, loader_te, dev, last_hidden=args.last_hidden, dropout=args.dropout)
 if args.last_hidden == 0:
     out = torch.sigmoid(out)
 out = out.numpy()

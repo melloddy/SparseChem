@@ -13,6 +13,6 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="",
     packages=setuptools.find_packages(),
-    install_requires=["numpy", "scipy", "pandas", "sklearn", "tqdm", "tensorboardX", "torch>=1.2.0"],
+    install_requires=["numpy", "scipy", "pandas", "sklearn", "tqdm", "torch>=1.2.0"],
     )
 

@@ -13,7 +13,6 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def all_metrics(y_true, y_score):
-    y_classes = np.where(y_score > 0.5, 1, 0) 
     if len(y_true) <= 1:
         df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan], "kappa": [np.nan]})
         return df
@@ -35,11 +34,19 @@ def all_metrics(y_true, y_score):
     avg_prec_score = sklearn.metrics.average_precision_score(
           y_true  = y_true,
           y_score = y_score)
-    kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
+    y_classes = np.where(y_score > 0.5, 1, 0)
+    kappa     = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
     df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "max_f1_score": [max_f1_score], "kappa": [kappa]})
     return df
 
-def compute_metrics(cols, y_true, y_score):
+def compute_metrics(cols, y_true, y_score, num_tasks):
+    if len(cols) < 1:
+        return pd.DataFrame({
+            "roc_auc_score": np.nan,
+            "auc_pr": np.nan,
+            "avg_prec_score": np.nan,
+            "max_f1_score": np.nan,
+            "kappa": np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
     metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
@@ -81,6 +88,7 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
     y_ind_list    = []
     y_true_list   = []
     y_hat_list    = []
+    num_tasks     = loader.dataset.y.shape[1]
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
@@ -103,10 +111,15 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
             y_true_list.append(y_data.cpu())
             y_hat_list.append(y_hat.cpu())
 
+        if len(y_ind_list) == 0:
+            return {
+                "metrics": compute_metrics([], y_true=[], y_score=[], num_tasks=num_tasks),
+                "logloss": np.nan,
+            }
         y_ind  = torch.cat(y_ind_list, dim=1).numpy()
         y_true = torch.cat(y_true_list, dim=0).numpy()
         y_hat  = torch.cat(y_hat_list, dim=0).numpy()
-        metrics = compute_metrics(y_ind[1], y_true=y_true, y_score=y_hat)
+        metrics = compute_metrics(y_ind[1], y_true=y_true, y_score=y_hat, num_tasks=num_tasks)
 
         return {
             'metrics': metrics,

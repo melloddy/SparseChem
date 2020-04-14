@@ -13,7 +13,7 @@ import time
 import json
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default="chembl_23_x.mtx")

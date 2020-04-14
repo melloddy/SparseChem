@@ -73,6 +73,10 @@ We also modified the weight decay to `1e-5`.
 The script uses all data for training but AUCs are calculated only on tasks with enough positive and negative examples, default is `25` each.
 To instead require at least 50 positives and 50 negatives, add `--min_samples_auc 50`.
 
+There are few options to reduce the time spent for AUC calculations:
+* `--eval_train 0` will turn off AUC calculation for the training set.
+* `--eval_frequency 2` will specify that AUCs should be calculated only every 2 epochs (default is 1). If set to `-1` the evaluation is only done once at the end of the run.
+
 ## Input folding
 The pipeline also provides an option to fold inputs to a smaller size.
 For example, adding `--fold_inputs 20000` folds the inputs to 20,000 dimension.
@@ -99,7 +103,7 @@ We then can use `predict.py` to make predictions for new compounds as follows:
 python predict.py \
     --x new_compounds.mtx \
     --outfile y_hat.npy \
-    --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05-conf.npy \
+    --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05.json \
     --model models/sc_chembl_h400.400_ldo0.2_wd1e-05.pt \
     --dev cuda:0
 ```

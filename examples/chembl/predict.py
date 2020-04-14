@@ -13,7 +13,7 @@ from scipy.special import expit
 parser = argparse.ArgumentParser(description="Using trained model to make predictions.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, required=True)
 parser.add_argument("--outfile", help="Output file for predictions (.npy)", type=str, required=True)
-parser.add_argument("--conf", help="Model conf file (.npy)", type=str, required=True)
+parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
@@ -22,13 +22,10 @@ args = parser.parse_args()
 
 print(args)
 
-conf = np.load(args.conf, allow_pickle=True).item()["conf"]
+conf = sc.load_results(args.conf)["conf"]
 
-if args.x.endswith('.mtx'):
-   ecfp    = scipy.io.mmread(args.x).tocsr()
-elif args.x.endswith('.npy'):
-   ecfp    = np.load(args.x, allow_pickle=True).item().tocsr()
-else:
+ecfp = sc.load_sparse(args.x)
+if ecfp is None:
    parser.print_help()
    print("--x: Descriptor file must have suffix .mtx or .npy")
    sys.exit(1) 

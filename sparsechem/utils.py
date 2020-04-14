@@ -5,6 +5,8 @@ import numpy as np
 import torch
 import scipy.sparse
 import scipy.io
+import types
+import json
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -44,6 +46,32 @@ def compute_metrics(cols, y_true, y_score):
                   y_score = g.y_score.values))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics
+
+def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
+    if metrics_tr is None:
+        if header:
+            print("Epoch\tlogl_va |  auc_va | aucpr_va | maxf1_va | tr_time")
+        output_fstr = (
+            f"{epoch}.\t{metrics_va['logloss']:.5f}"
+            f" | {metrics_va['roc_auc_score']:.5f}"
+            f" |  {metrics_va['auc_pr']:.5f}"
+            f" |  {metrics_va['max_f1_score']:.5f}"
+            f" | {train_time:6.1f}"
+        )
+        print(output_fstr)
+        return
+
+    ## full print
+    if header:
+        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
+    output_fstr = (
+        f"{epoch}.\t{metrics_tr['logloss']:.5f}  {metrics_va['logloss']:.5f}"
+        f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
+        f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
+        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
+        f" | {train_time:6.1f}"
+    )
+    print(output_fstr)
 
 def evaluate_binary(net, loader, loss, dev, progress=True):
     net.eval()
@@ -179,3 +207,26 @@ def load_sparse(filename):
        return np.load(filename, allow_pickle=True).item().tocsr()
     return None
 
+def load_results(filename):
+    """Loads conf and results from a file
+    Args:
+        filename    name of the json/npy file
+        only_conf   only load the configuration
+    """
+    if filename.endswith(".npy"):
+        return np.load(filename, allow_pickle=True).item()
+
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    data["conf"] = types.SimpleNamespace(**data["conf"])
+
+    if "results" in data:
+        for key in data["results"]:
+            data["results"][key] = pd.read_json(data["results"][key])
+
+    if "results_agg" in data:
+        for key in data["results_agg"]:
+            data["results_agg"][key] = pd.read_json(data["results_agg"][key], typ="series")
+
+    return data

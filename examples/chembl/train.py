@@ -9,6 +9,7 @@ import os
 import sys
 import os.path
 import time
+import json
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
@@ -41,10 +42,12 @@ parser.add_argument("--filename", help="Filename for results", type=str, default
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
+parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
+parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 
 args = parser.parse_args()
 
-def vprint(s):
+def vprint(s=""):
     if args.verbose:
         print(s)
 
@@ -168,6 +171,8 @@ scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha
 
 task_weights = torch.from_numpy(task_weights).to(dev)
 
+num_prints = 0
+
 for epoch in range(args.epochs):
     t0 = time.time()
     loss_tr = sc.train_binary(
@@ -177,78 +182,70 @@ for epoch in range(args.epochs):
         progress        = args.verbose >= 2)
 
     t1 = time.time()
-    results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
-    t2 = time.time()
-    results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
 
-    metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
-    metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
+    eval_round = (args.eval_frequency > 0) and ((epoch + 1) % args.eval_frequency == 0)
+    last_round = epoch == args.epochs - 1
 
-    metrics_tr["epoch_time"] = t1 - t0
-    metrics_va["epoch_time"] = t2 - t1
+    if eval_round or last_round:
+        results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
+        t2 = time.time()
 
-    if epoch % 20 == 0:
-        vprint("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
-    output_fstr = (
-        f"{epoch}.\t{results_tr['logloss']:.5f}  {results_va['logloss']:.5f}"
-        f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
-        f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
-        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
-        f" | {t1 - t0:6.1f}"
-    )
-    vprint(output_fstr)
-    for metric_tr_name in metrics_tr.index:
-        writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
-        writer.add_scalar(metric_tr_name+"/va", metrics_va[metric_tr_name], epoch)
-    writer.add_scalar('logloss/tr', results_tr['logloss'], epoch)
-    writer.add_scalar('logloss/va', results_va['logloss'], epoch)
+        if args.eval_train:
+            results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
+            metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
+            metrics_tr["epoch_time"] = t1 - t0
+            metrics_tr["logloss"]    = results_tr['logloss']
+            for metric_tr_name in metrics_tr.index:
+                writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
+        else:
+            results_tr = None
+            metrics_tr = None
+
+        metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
+        metrics_va["epoch_time"] = t2 - t1
+        metrics_va["logloss"]    = results_va["logloss"]
+        for metric_va_name in metrics_va.index:
+            writer.add_scalar(metric_va_name+"/va", metrics_va[metric_va_name], epoch)
+
+        if args.verbose:
+            header = num_prints % 20 == 0
+            num_prints += 1
+            sc.print_metrics(epoch, t1 - t0, metrics_tr, metrics_va, header)
+
     scheduler.step()
 
 writer.close()
+vprint()
 vprint("Saving performance metrics (AUCs) and model.")
-
-if not os.path.exists("results"):
-    os.makedirs("results")
-
-aucs = pd.DataFrame({
-    "num_pos": num_pos,
-    "num_neg": num_neg,
-    "num_pos_va": num_pos_va,
-    "num_neg_va": num_neg_va,
-    "auc_tr":  results_tr["metrics"]['roc_auc_score'],
-    "auc_va":  results_va["metrics"]['roc_auc_score'],
-    "auc_pr_tr":   results_tr["metrics"]["auc_pr"],
-    "auc_pr_va":   results_va["metrics"]["auc_pr"],
-    "avg_prec_tr": results_tr["metrics"]["avg_prec_score"],
-    "avg_prec_va": results_va["metrics"]["avg_prec_score"],
-    "max_f1_tr":   results_tr["metrics"]["max_f1_score"],
-    "max_f1_va":   results_va["metrics"]["max_f1_score"],
-    "kappa_tr":    results_tr["metrics"]["kappa"],
-    "kappa_va":    results_va["metrics"]["kappa"],
-})
-
-aucs_file = f"results/{name}-metrics.csv"
-aucs.to_csv(aucs_file)
-vprint(f"Saved metrics (AUC, AUC-PR, MaxF1) for each task into '{aucs_file}'.")
-
 
 #####   model saving   #####
 if not os.path.exists("models"):
    os.makedirs("models")
 
 model_file = f"models/{name}.pt"
-conf_file  = f"models/{name}-conf.npy"
+out_file   = f"models/{name}.json"
 
-if args.save_model == 1 :
+if args.save_model:
    torch.save(net.state_dict(), model_file)
    vprint(f"Saved model weights into '{model_file}'.")
 
-results = {}
-results["conf"] = args
-results["results"] = {}
-results["results"]["va"] = {"auc_roc": aucs["auc_va"], "auc_pr": aucs["auc_pr_va"], "logloss": results_va['logloss']}
-results["results"]["tr"] = {"auc_roc": aucs["auc_tr"], "auc_pr": aucs["auc_pr_tr"], "logloss": results_tr['logloss']}
-results["results_agg"]   = {"va": metrics_va, "tr": metrics_tr}
+## adding positive and negative numbers
+results_va["metrics"]["num_pos"] = num_pos_va
+results_va["metrics"]["num_neg"] = num_neg_va
 
-np.save(conf_file, results)
-vprint(f"Saved config and results into '{conf_file}'.")
+out = {}
+out["conf"]        = args.__dict__
+out["results"]     = {"va": results_va["metrics"].to_json()}
+out["results_agg"] = {"va": metrics_va.to_json()}
+
+if args.eval_train:
+    results_tr["metrics"]["num_pos"] = num_pos - num_pos_va
+    results_tr["metrics"]["num_neg"] = num_neg - num_neg_va
+
+    out["results"]["tr"]     = results_tr["metrics"].to_json()
+    out["results_agg"]["tr"] = metrics_tr.to_json()
+
+with open(out_file, "w") as f:
+    json.dump(out, f)
+
+vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  res = sparsechem.load_results('{out_file}')")

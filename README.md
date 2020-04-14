@@ -117,3 +117,9 @@ y_hat = np.load("y_hat.npy")
 ```
 The predictions themselves are class probabilities (values between 0.0 and 1.0).
 
+## Retreiving last hidden layers
+Instead of outputting the predictions we can use `predict.py` to output the activations of the last layer.
+This can be done by adding the option `--last_hidden 1`.
+
+Then the output file will contain the numpy matrix of the hidden vectors, which can be loaded the same way as predictions.
+

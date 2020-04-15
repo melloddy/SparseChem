@@ -53,7 +53,7 @@ def compute_metrics(cols, y_true, y_score, num_tasks):
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values))
     metrics.reset_index(level=-1, drop=True, inplace=True)
-    return metrics
+    return metrics.reindex(np.arange(num_tasks))
 
 def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     if metrics_tr is None:

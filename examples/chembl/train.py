@@ -249,4 +249,4 @@ if args.eval_train:
 with open(out_file, "w") as f:
     json.dump(out, f)
 
-vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  res = sparsechem.load_results('{out_file}')")
+vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  import sparsechem as sc\n  res = sc.load_results('{out_file}')")

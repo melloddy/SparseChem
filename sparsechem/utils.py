@@ -98,7 +98,6 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
             y_ind  = b["y_ind"].to(dev)
             y_data = b["y_data"].to(dev)
-            y_data = (y_data + 1) / 2.0
 
             y_hat_all = net(X)
             y_hat     = y_hat_all[y_ind[0], y_ind[1]]
@@ -143,7 +142,6 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
         y_ind   = b["y_ind"].to(dev)
         y_w     = task_weights[y_ind[1]]
         y_data  = b["y_data"].to(dev)
-        y_data  = (y_data + 1) / 2.0
 
         yhat_all = net(X)
         yhat     = yhat_all[y_ind[0], y_ind[1]]

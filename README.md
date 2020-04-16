@@ -67,7 +67,7 @@ python train.py \
   --lr_steps       10 \
   --lr_alpha       0.3
 ```
-We also modified the weight decay to `1e-5`.
+We also modified the weight decay to `1e-4`.
 
 ## AUC calculation
 The script uses all data for training but AUCs are calculated only on tasks with enough positive and negative examples, default is `25` each.

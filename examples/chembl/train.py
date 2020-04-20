@@ -89,12 +89,14 @@ if args.task_info is not None:
     tw_df.sort_values("task_id", inplace=True)
     
     if tw_df.shape[1] == 2:
-        task_types = np.ones(ic50.shape[1], dtype=np.int16)
+        task_types = np.ones(ic50.shape[1], dtype=np.int64)
     else:
         assert tw_df.shape[1] == 3, "Task weight file (CSV) can only have 2 or max 3 columns"
         assert "task_type" in tw_df.columns, "task_type is missing in task info CSV file"
-        assert (tw_df.task_type == 1 or tw_df.task_type == 2 or tw_df.task_ype == 3 or tw_df.task_type == 4).all(), "task type can only be 1,2,3 or 4"
-        task_types = tw_df.task_type.values.astype(np.int16)
+        assert (tw_df.task_type.dtype == np.int64), "task type can only be 1,2,3 or 4"
+        assert (1 <= tw_df.task_type).all(), "task type can only be 1,2,3 or 4"
+        assert (tw_df.task_type <= 4).all(), "task type can only be 1,2,3 or 4"
+        task_types = tw_df.task_type.values.astype(np.int64)
 
     assert ic50.shape[1] == tw_df.shape[0], "task weights have different size to y columns."
     assert (0 <= tw_df.weight).all(), "task weights must not be negative"
@@ -109,7 +111,7 @@ if args.task_info is not None:
 else:
     ## default weights are set to 1.0
     task_weights = np.ones(ic50.shape[1], dtype=np.float32)
-    task_types = np.ones(ic50.shape[1], dtype=np.int16)
+    task_types = np.ones(ic50.shape[1], dtype=np.int64)
 
 
 assert ecfp.shape[0] == ic50.shape[0]

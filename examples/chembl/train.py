@@ -18,7 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default="chembl_23_x.mtx")
 parser.add_argument("--y", help="Activity file (matrix market or numpy)", type=str, default="chembl_23_y.mtx")
-parser.add_argument("--task_weights", help="CSV file with columns task_id and weight", type=str, default=None)
+parser.add_argument("--task_info", help="CSV file with columns task_id , weight and type (optional: default classification)", type=str, default=None)
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
@@ -81,11 +81,20 @@ if ic50 is None:
 folding = np.load(args.folding)
 
 ## Loading task weights
-if args.task_weights is not None:
-    tw_df = pd.read_csv(args.task_weights)
-    assert "task_id" in tw_df.columns, "task_id is missing in task weights CVS file"
-    assert "weight" in tw_df.columns, "weight is missing in task weights CVS file"
-    assert tw_df.shape[1] == 2, "Task weight file (CSV) must only have 2 columns"
+if args.task_info is not None:
+    tw_df = pd.read_csv(args.task_info)
+    assert "task_id" in tw_df.columns, "task_id is missing in task info CVS file"
+    assert "weight" in tw_df.columns, "weight is missing in task info CSV file"
+    
+    tw_df.sort_values("task_id", inplace=True)
+    
+    if tw_df.shape[1] == 2:
+        task_types = np.ones(ic50.shape[1], dtype=np.int16)
+    else:
+        assert tw_df.shape[1] == 3, "Task weight file (CSV) can only have 2 or max 3 columns"
+        assert "task_type" in tw_df.columns, "task_type is missing in task info CSV file"
+        assert (tw_df.task_type == 1 or tw_df.task_type == 2 or tw_df.task_ype == 3 or tw_df.task_type == 4).all(), "task type can only be 1,2,3 or 4"
+        task_types = tw_df.task_type.values.astype(np.int16)
 
     assert ic50.shape[1] == tw_df.shape[0], "task weights have different size to y columns."
     assert (0 <= tw_df.weight).all(), "task weights must not be negative"
@@ -96,11 +105,11 @@ if args.task_weights is not None:
     assert (tw_df.task_id < tw_df.shape[0]).all(), "task ids in task weights must be below number of tasks"
     assert tw_df.shape[0]==ic50.shape[1], f"The number of task weights ({tw_df.shape[0]}) must be equal to the number of columns in Y ({ic50.shape[1]})."
 
-    tw_df.sort_values("task_id", inplace=True)
     task_weights = tw_df.weight.values.astype(np.float32)
 else:
     ## default weights are set to 1.0
     task_weights = np.ones(ic50.shape[1], dtype=np.float32)
+    task_types = np.ones(ic50.shape[1], dtype=np.int16)
 
 
 assert ecfp.shape[0] == ic50.shape[0]

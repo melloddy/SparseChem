@@ -191,7 +191,8 @@ for epoch in range(args.epochs):
         net, optimizer, loader_tr, loss, dev,
         task_weights    = task_weights,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2)
+        progress        = args.verbose >= 2,
+        task_types = task_types)
 
     t1 = time.time()
 

@@ -16,7 +16,8 @@ class SparseDataset(Dataset):
 
         self.x = x.tocsr(copy=False).astype(np.float32)
         self.y = y.tocsr(copy=False).astype(np.float32)
-
+        # scale labels from {-1, -1} to {0, 1}, zeros are stored explicitly
+        self.y.data = (self.y.data + 1) / 2.0
 
     def __len__(self):
         return(self.x.shape[0])
@@ -30,14 +31,21 @@ class SparseDataset(Dataset):
         return self.y.shape[1]
 
     def __getitem__(self, idx):
-        xi = self.x[idx,:]
-        yi = self.y[idx,:]
+        x_start = self.x.indptr[idx]
+        x_end = self.x.indptr[idx + 1]
+        x_indices = self.x.indices[x_start:x_end]
+        x_data = self.x.data[x_start:x_end]
+
+        y_start = self.y.indptr[idx]
+        y_end = self.y.indptr[idx + 1]
+        y_indices = self.y.indices[y_start:y_end]
+        y_data = self.y.data[y_start:y_end]
 
         return {
-            "x_ind":  xi.indices,
-            "x_data": xi.data,
-            "y_ind":  yi.indices,
-            "y_data": yi.data,
+            "x_ind":  x_indices,
+            "x_data": x_data,
+            "y_ind":  y_indices,
+            "y_data": y_data,
         }
 
     def batch_to_x(self, batch, dev):

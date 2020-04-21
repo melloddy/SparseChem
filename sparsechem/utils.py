@@ -125,7 +125,7 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 
-def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1, progress=True):
+def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1, progress=True, task_types=None):
     net.train()
     logloss_sum   = 0.0
     logloss_count = 0

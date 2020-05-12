@@ -54,7 +54,7 @@ To get a two layer network we just add several values to `--hidden_sizes`.
 ```
 python train.py \
   --x ./chembl_23_x.mtx \
-  --y ./chembl_23_y.mtx \
+  --y_class ./chembl_23_y.mtx \
   --folding ./folding_hier_0.6.npy \
   --fold_va 0 \
   --batch_ratio    0.02 \
@@ -83,13 +83,38 @@ For example, adding `--fold_inputs 20000` folds the inputs to 20,000 dimension.
 This is useful for reducing the model size, without hurting the performance too much.
 
 ## Task weighting
-Sparsechem also supports task weighting.
-This can be enabled by adding a `--task_weights weights.csv` option,
+SparseChem also supports task weighting.
+This can be enabled by adding a `--weights_class weights.csv` option,
 where the file `weights.csv` should have two columns:
-* `task_id` integer from 0 to Ntasks - 1,
+* `task_id` integer from 0 to number of classification tasks minus 1,
 * `weight` real value between 0.0 and 1.0 (inclusive).
 
 The number of weights in the CSV file must be equal to the number of tasks in `y` matrix.
+
+## Regression
+SparseChem also supports regression and also both regression and classification jointly.
+Here is an example to use regression:
+```
+python train.py \
+  --x ./chembl_23_x.mtx \
+  --y_regr ./chembl_23_y.mtx \
+  --folding ./folding_hier_0.6.npy \
+  --fold_va 0 \
+  --batch_ratio    0.02 \
+  --hidden_sizes   400 400 \
+  --last_non_linearity tanh \
+  --weight_decay   1e-4 \
+  --last_dropout   0.2 \
+  --middle_dropout 0.2 \
+  --epochs         20 \
+  --lr             1e-3 \
+  --lr_steps       10 \
+  --lr_alpha       0.3
+```
+We matrix for `--y_regr` is sparse matrix (similar to classification).
+For which SparseChem minimizes the mean squared error (MSE) loss.
+Note we have also switched the non-linearity to `tanh`.
+
 
 ## Running on CPU or other GPUs
 The default device is `cuda:0`.
@@ -97,7 +122,7 @@ To train the model on CPU just add `--dev cpu` to the arguments.
 Similarly, to choose another GPU, we can specify `--dev cuda:1`.
 
 ## Predicting on new compounds
-After the run is complete the model's **weights** and **conf** are saved under `models/` folder.
+After the run is complete the model's **parameters** and **conf** are saved under `models/` folder.
 We then can use `predict.py` to make predictions for new compounds as follows:
 ```bash
 python predict.py \

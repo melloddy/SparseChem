@@ -1,6 +1,7 @@
 # Copyright (c) 2020 KU Leuven
 import sparsechem as sc
 import scipy.io
+import scipy.sparse
 import numpy as np
 import pandas as pd
 import torch
@@ -16,9 +17,11 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
-parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default="chembl_23_x.mtx")
-parser.add_argument("--y", help="Activity file (matrix market or numpy)", type=str, default="chembl_23_y.mtx")
-parser.add_argument("--task_info", help="CSV file with columns task_id , weight and type (optional: default classification)", type=str, default=None)
+parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, weight (for classification tasks)", type=str, default=None)
+parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, weight (for regression tasks)", type=str, default=None)
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
@@ -37,9 +40,10 @@ parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", t
 parser.add_argument("--input_size_freq", help="Number of high importance features", type=int, default=None)
 parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no folding)", type=int, default=None)
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
-parser.add_argument("--min_samples_auc", help="Minimum number samples for AUC calculation", type=int, default=25)
+parser.add_argument("--min_samples_auc", help="Minimum number samples (in each class) for AUC calculation", type=int, default=25)
+parser.add_argument("--min_samples_regr", help="Minimum number samples for regression metric calculation", type=int, default=100)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
-parser.add_argument("--filename", help="Filename for results", type=str, default=None)
+parser.add_argument("--run_name", help="Run name for results", type=str, default=None)
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
@@ -54,104 +58,78 @@ def vprint(s=""):
 
 vprint(args)
 
-if args.filename is not None:
-    name = args.filename
+if args.run_name is not None:
+    name = args.run_name
 else:
     name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
 vprint(f"Run name is '{name}'.")
 
-tb_name = "runs/"+name
-writer = SummaryWriter(tb_name)
+tb_name = "runs/" + name
+writer  = SummaryWriter(tb_name)
 assert args.input_size_freq is None, "Using tail compression not yet supported."
 
-ecfp = sc.load_sparse(args.x)
-if ecfp is None:
-   parser.print_help()
-   vprint("--x: Descriptor file must have suffix .mtx or .npy")
-   sys.exit(1)
+if (args.y_class is None) and (args.y_regr is None):
+    raise ValueError("No label data specified, please add --y_class and/or --y_regr.")
 
-ic50 = sc.load_sparse(args.y)
-if ic50 is None:
-   parser.print_help()
-   vprint("--y: Activity file must have suffix .mtx or .npy")
-   sys.exit(1)
+ecfp    = sc.load_sparse(args.x)
+y_class = sc.load_sparse(args.y_class)
+y_regr  = sc.load_sparse(args.y_regr)
+
+if y_class is None:
+    y_class = scipy.sparse.csr_matrix((ecfp.shape[0], 0))
+if y_regr is None:
+    y_regr  = scipy.sparse.csr_matrix((ecfp.shape[0], 0))
 
 folding = np.load(args.folding)
+assert ecfp.shape[0] == folding.shape[0], "x and folding must have same number of rows"
 
 ## Loading task weights
-if args.task_info is not None:
-    tw_df = pd.read_csv(args.task_info)
-    assert "task_id" in tw_df.columns, "task_id is missing in task info CVS file"
-    assert "weight" in tw_df.columns, "weight is missing in task info CSV file"
-    
-    tw_df.sort_values("task_id", inplace=True)
-    
-    if tw_df.shape[1] == 2:
-        task_types = np.ones(ic50.shape[1], dtype=np.int64)
-    else:
-        assert tw_df.shape[1] == 3, "Task weight file (CSV) can only have 2 or max 3 columns"
-        assert "task_type" in tw_df.columns, "task_type is missing in task info CSV file"
-        assert (tw_df.task_type.dtype == np.int64), "task type can only be 1,2,3 or 4"
-        assert (1 <= tw_df.task_type).all(), "task type can only be 1,2,3 or 4"
-        assert (tw_df.task_type <= 4).all(), "task type can only be 1,2,3 or 4"
-        task_types = tw_df.task_type.values.astype(np.int64)
-
-    assert ic50.shape[1] == tw_df.shape[0], "task weights have different size to y columns."
-    assert (0 <= tw_df.weight).all(), "task weights must not be negative"
-    assert (tw_df.weight <= 1).all(), "task weights must not be larger than 1.0"
-
-    assert tw_df.task_id.unique().shape[0] == tw_df.shape[0], "task ids are not all unique"
-    assert (0 <= tw_df.task_id).all(), "task ids in task weights must not be negative"
-    assert (tw_df.task_id < tw_df.shape[0]).all(), "task ids in task weights must be below number of tasks"
-    assert tw_df.shape[0]==ic50.shape[1], f"The number of task weights ({tw_df.shape[0]}) must be equal to the number of columns in Y ({ic50.shape[1]})."
-
-    task_weights = tw_df.weight.values.astype(np.float32)
-else:
-    ## default weights are set to 1.0
-    task_weights = np.ones(ic50.shape[1], dtype=np.float32)
-    task_types = np.ones(ic50.shape[1], dtype=np.int64)
-
-
-assert ecfp.shape[0] == ic50.shape[0]
-assert ecfp.shape[0] == folding.shape[0]
+weights_class = sc.load_task_weights(args.weights_class, y=y_class, label="y_class")
+weights_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
 
 if args.fold_inputs is not None:
     ecfp = sc.fold_inputs(ecfp, folding_size=args.fold_inputs)
     vprint(f"Folding inputs to {ecfp.shape[1]} dimensions.")
 
 ## Input transformation
-if args.input_transform == "binarize":
-    ecfp.data = (ecfp.data > 0).astype(np.float)
-elif args.input_transform == "tanh":
-    ecfp.data = np.tanh(ecfp.data)
-elif args.input_transform == "none":
-    pass
+ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=args.input_transform)
 
-num_pos  = np.array((ic50 == +1).sum(0)).flatten()
-num_neg  = np.array((ic50 == -1).sum(0)).flatten()
-auc_cols = np.where((num_pos >= args.min_samples_auc) & (num_neg >= args.min_samples_auc))[0]
+num_pos    = np.array((y_class == +1).sum(0)).flatten()
+num_neg    = np.array((y_class == -1).sum(0)).flatten()
+num_regr   = np.bincount(y_regr.indices)
+class_cols = np.where((num_pos >= args.min_samples_auc) & (num_neg >= args.min_samples_auc))[0]
+regr_cols  = np.where(num_regr >= args.min_samples_regr)[0]
 
-vprint(f"There are {len(auc_cols)} columns for calculating mean AUC (i.e., have at least {args.min_samples_auc} positives and {args.min_samples_auc} negatives).")
 vprint(f"Input dimension: {ecfp.shape[1]}")
 vprint(f"#samples:        {ecfp.shape[0]}")
-vprint(f"#tasks:          {ic50.shape[1]}")
+vprint(f"#classification tasks:  {y_class.shape[1]}")
+vprint(f"#regression tasks:      {y_regr.shape[1]}")
+vprint(f"There are {len(class_cols)} classification tasks for calculating mean AUC (i.e., have at least {args.min_samples_auc} positives and {args.min_samples_auc} negatives).")
+vprint(f"There are {len(regr_cols)} regression tasks for calculating metrics (i.e., having at least {args.min_samples_regr} data points).")
 
 if args.fold_te is not None:
     ## removing test data
     assert args.fold_te != args.fold_va, "fold_va and fold_te must not be equal."
     keep    = folding != args.fold_te
     ecfp    = ecfp[keep]
-    ic50    = ic50[keep]
+    y_class = y_class[keep]
+    y_regr  = y_regr[keep]
     folding = folding[keep]
 
 fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]
 idx_va  = np.where(folding == fold_va)[0]
 
-num_pos_va  = np.array((ic50[idx_va] == +1).sum(0)).flatten() 
-num_neg_va  = np.array((ic50[idx_va] == -1).sum(0)).flatten()
+y_class_tr = y_class[idx_tr]
+y_class_va = y_class[idx_va]
+y_regr_tr  = y_regr[idx_tr]
+y_regr_va  = y_regr[idx_va]
+
+num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten() 
+num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
+num_regr_va = np.bincount(y_regr_va.indices)
 
 batch_size  = int(np.ceil(args.batch_ratio * idx_tr.shape[0]))
 num_int_batches = 1
@@ -162,18 +140,25 @@ if args.internal_batch_max is not None:
         batch_size      = int(np.ceil(batch_size / num_int_batches))
 vprint(f"#internal batch size:   {batch_size}")
 
-dataset_tr = sc.SparseDataset(x=ecfp[idx_tr], y=ic50[idx_tr])
-dataset_va = sc.SparseDataset(x=ecfp[idx_va], y=ic50[idx_va])
+dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr)
+dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va)
 
-loader_tr  = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 8, pin_memory=True, collate_fn=sc.sparse_collate, shuffle=True)
-loader_va  = DataLoader(dataset_va, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
+loader_tr = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 8, pin_memory=True, collate_fn=dataset_tr.collate, shuffle=True)
+loader_va = DataLoader(dataset_va, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=dataset_va.collate, shuffle=False)
 
 args.input_size  = dataset_tr.input_size
 args.output_size = dataset_tr.output_size
 
-dev  = args.dev
+args.class_output_size = dataset_tr.class_output_size
+args.regr_output_size  = dataset_tr.regr_output_size
+
+dev  = torch.device(args.dev)
 net  = sc.SparseFFN(args).to(dev)
-loss = torch.nn.BCEWithLogitsLoss(reduction="none")
+loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")
+loss_regr  = torch.nn.MSELoss(reduction="none")
+
+if weights_class is not None: weights_class = weights_class.to(dev)
+if weights_regr is not None: weights_regr = weights_regr.to(dev)
 
 vprint("Network:")
 vprint(net)
@@ -181,18 +166,20 @@ vprint(net)
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
-task_weights = torch.from_numpy(task_weights).to(dev)
-
 num_prints = 0
 
 for epoch in range(args.epochs):
     t0 = time.time()
-    loss_tr = sc.train_binary(
-        net, optimizer, loader_tr, loss, dev,
-        task_weights    = task_weights,
+    sc.train_class_regr(
+        net, optimizer, 
+        loader          = loader_tr,
+        loss_class      = loss_class,
+        loss_regr       = loss_regr,
+        dev             = dev,
+        weights_class   = weights_class,
+        weights_regr    = weights_regr,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2,
-        task_types = task_types)
+        progress        = args.verbose >= 2)
 
     t1 = time.time()
 
@@ -200,30 +187,26 @@ for epoch in range(args.epochs):
     last_round = epoch == args.epochs - 1
 
     if eval_round or last_round:
-        results_va = sc.evaluate_binary(net, loader_va, loss, dev, progress = args.verbose >= 2)
-        t2 = time.time()
+        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, weights_class=weights_class, weights_regr=weights_regr, class_cols=class_cols, regr_cols=regr_cols, dev=dev, progress = args.verbose >= 2)
+        for key, val in results_va["classification_agg"].items():
+            writer.add_scalar(key+"/tr", val, epoch)
+        for key, val in results_va["regression_agg"].items():
+            writer.add_scalar(key+"/tr", val, epoch)
 
         if args.eval_train:
-            results_tr = sc.evaluate_binary(net, loader_tr, loss, dev, progress = args.verbose >= 2)
-            metrics_tr = results_tr["metrics"].reindex(labels=auc_cols).mean(0)
-            metrics_tr["epoch_time"] = t1 - t0
-            metrics_tr["logloss"]    = results_tr['logloss']
-            for metric_tr_name in metrics_tr.index:
-                writer.add_scalar(metric_tr_name+"/tr", metrics_tr[metric_tr_name], epoch)
+            results_tr = sc.evaluate_class_regr(net, loader_tr, loss_class, loss_regr, weights_class=weights_class, weights_regr=weights_regr, class_cols=class_cols, regr_cols=regr_cols, dev=dev, progress = args.verbose >= 2)
+            for key, val in results_tr["classification_agg"].items():
+                writer.add_scalar(key+"/tr", val, epoch)
+            for key, val in results_tr["regression_agg"].items():
+                writer.add_scalar(key+"/tr", val, epoch)
         else:
             results_tr = None
-            metrics_tr = None
 
-        metrics_va = results_va["metrics"].reindex(labels=auc_cols).mean(0)
-        metrics_va["epoch_time"] = t2 - t1
-        metrics_va["logloss"]    = results_va["logloss"]
-        for metric_va_name in metrics_va.index:
-            writer.add_scalar(metric_va_name+"/va", metrics_va[metric_va_name], epoch)
 
         if args.verbose:
             header = num_prints % 20 == 0
             num_prints += 1
-            sc.print_metrics(epoch, t1 - t0, metrics_tr, metrics_va, header)
+            sc.print_metrics_cr(epoch, t1 - t0, results_tr, results_va, header)
 
     scheduler.step()
 
@@ -242,23 +225,15 @@ if args.save_model:
    torch.save(net.state_dict(), model_file)
    vprint(f"Saved model weights into '{model_file}'.")
 
-## adding positive and negative numbers
-results_va["metrics"]["num_pos"] = num_pos_va
-results_va["metrics"]["num_neg"] = num_neg_va
+results_va["classification"]["num_pos"] = num_pos_va
+results_va["classification"]["num_neg"] = num_neg_va
+results_va["regression"]["num_samples"] = num_regr_va
 
-out = {}
-out["conf"]        = args.__dict__
-out["results"]     = {"va": results_va["metrics"].to_json()}
-out["results_agg"] = {"va": metrics_va.to_json()}
+if results_tr is not None:
+    results_tr["classification"]["num_pos"] = num_pos - num_pos_va
+    results_tr["classification"]["num_neg"] = num_neg - num_neg_va
+    results_tr["regression"]["num_samples"] = num_regr - num_regr_va
 
-if args.eval_train:
-    results_tr["metrics"]["num_pos"] = num_pos - num_pos_va
-    results_tr["metrics"]["num_neg"] = num_neg - num_neg_va
-
-    out["results"]["tr"]     = results_tr["metrics"].to_json()
-    out["results_agg"]["tr"] = metrics_tr.to_json()
-
-with open(out_file, "w") as f:
-    json.dump(out, f)
+sc.save_results(out_file, args, validation=results_va, training=results_tr)
 
 vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  import sparsechem as sc\n  res = sc.load_results('{out_file}')")

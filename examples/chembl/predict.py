@@ -28,14 +28,7 @@ print(args)
 conf = sc.load_results(args.conf)["conf"]
 
 ecfp = sc.load_sparse(args.x)
-if ecfp is None:
-   parser.print_help()
-   print("--x: Descriptor file must have suffix .mtx or .npy")
-   sys.exit(1) 
-
-if conf.fold_inputs is not None:
-    ecfp = sc.fold_inputs(ecfp, folding_size=conf.fold_inputs)
-    print(f"Folding inputs to {ecfp.shape[1]} dimensions.")
+ecfp = sc.fold_transform_inputs(ecfp, folding_size=conf.fold_inputs, transform=conf.input_transform)
 
 print(f"Input dimension: {ecfp.shape[1]}")
 print(f"#samples:        {ecfp.shape[0]}")

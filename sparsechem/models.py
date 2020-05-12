@@ -146,6 +146,8 @@ class LastNet(torch.nn.Module):
 class SparseFFN(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
+        self.class_output_size = conf.class_output_size
+        self.regr_output_size  = conf.regr_output_size
 
         self.net = nn.Sequential(
             SparseInputNet(conf),
@@ -157,5 +159,11 @@ class SparseFFN(torch.nn.Module):
         if last_hidden:
             H = self.net[:-1](X)
             return self.net[-1].net[:-1](H)
-        return self.net(X)
+        out = self.net(X)
+        if self.class_output_size is None:
+            return out
+        ## splitting to class and regression
+        if self.class_output_size == 0: return None, out
+        if self.regr_output_size == 0:  return out, None
+        return out[:, :self.class_output_size], out[:, self.class_output_size:]
 

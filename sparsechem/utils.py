@@ -8,6 +8,7 @@ import scipy.sparse
 import scipy.io
 import types
 import json
+from collections import namedtuple
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -97,6 +98,7 @@ def compute_metrics_regr(cols, y_true, y_score, num_tasks):
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
+
 def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     if metrics_tr is None:
         if header:
@@ -123,35 +125,45 @@ def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     )
     print(output_fstr)
 
+def print_table(formats, data):
+    for key, fmt in formats.items():
+        print(fmt.format(data[key]), end="")
+
+Column = namedtuple("Column", "key size dec title")
+columns_cr = [
+    Column("epoch",         size=6, dec= 0, title="Epoch"),
+    Column(None,            size=1, dec=-1, title="|"),
+    Column("logloss",       size=8, dec= 5, title="logl"),
+    Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
+    Column("auc_pr",        size=8, dec= 5, title="aucpr"),
+    Column("max_f1_score",  size=8, dec= 5, title="maxf1"),
+    Column(None,            size=1, dec=-1, title="|"),
+    Column("rmse",          size=9, dec= 5, title="rmse"),
+    Column("rsquared",      size=9, dec= 5, title="rsquared"),
+    Column("corrcoef",      size=9, dec= 5, title="corrcoef"),
+    Column(None,            size=1, dec=-1, title="|"),
+    Column("train_time",    size=6, dec= 1, title="tr_time"),
+]
+
+def print_cell(value, size, dec, left, end=" "):
+    align = "<" if left else ">"
+    if type(value) == str:
+        print(("{:" + align + str(size) + "}").format(value), end=end)
+    else:
+        print(("{:" + align + str(size) + "." + str(dec) + "f}").format(value), end=end)
+
 def print_metrics_cr(epoch, train_time, results_tr, results_va, header):
-    if results_tr is None:
-        metrics_va = results_va["classification_agg"]
-        if header:
-            print("Epoch\tlogl_va |  auc_va | aucpr_va | maxf1_va | tr_time")
-        output_fstr = (
-            f"{epoch}.\t{metrics_va['logloss']:.5f}"
-            f" | {metrics_va['roc_auc_score']:.5f}"
-            f" |  {metrics_va['auc_pr']:.5f}"
-            f" |  {metrics_va['max_f1_score']:.5f}"
-            f" | {train_time:6.1f}"
-        )
-        print(output_fstr)
-        return
-
-    ## full print
+    data = pd.concat([results_va["classification_agg"], results_va["regression_agg"]])
+    data["train_time"] = train_time
+    data["epoch"] = epoch
     if header:
-        print("Epoch\tlogl_tr  logl_va |  auc_tr   auc_va | aucpr_tr  aucpr_va | maxf1_tr  maxf1_va | tr_time")
-    metrics_tr = results_tr["classification_agg"]
-    metrics_va = results_va["classification_agg"]
-    output_fstr = (
-        f"{epoch}.\t{metrics_tr['logloss']:.5f}  {metrics_va['logloss']:.5f}"
-        f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
-        f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
-        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
-        f" | {train_time:6.1f}"
-    )
-    print(output_fstr)
-
+        for i, col in enumerate(columns_cr):
+            print_cell(col.title, col.size, dec=0, left=(i==0))
+        print()
+    ## printing row with values
+    for i, col in enumerate(columns_cr):
+        print_cell(data.get(col.key, col.title), col.size, dec=col.dec, left=(i==0))
+    print()
 
 def evaluate_binary(net, loader, loss, dev, progress=True):
     net.eval()

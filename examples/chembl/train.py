@@ -202,8 +202,8 @@ for epoch in range(args.epochs):
         else:
             results_tr = None
 
-
         if args.verbose:
+            ## printing a new header every 20 lines
             header = num_prints % 20 == 0
             num_prints += 1
             sc.print_metrics_cr(epoch, t1 - t0, results_tr, results_va, header)

@@ -146,8 +146,12 @@ class LastNet(torch.nn.Module):
 class SparseFFN(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
-        self.class_output_size = conf.class_output_size
-        self.regr_output_size  = conf.regr_output_size
+        if "class_output_size" in conf:
+            self.class_output_size = conf.class_output_size
+            self.regr_output_size  = conf.regr_output_size
+        else:
+            self.class_output_size = None
+            self.regr_output_size  = None
 
         self.net = nn.Sequential(
             SparseInputNet(conf),

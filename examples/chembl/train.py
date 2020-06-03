@@ -44,6 +44,7 @@ parser.add_argument("--min_samples_auc", help="Minimum number samples (in each c
 parser.add_argument("--min_samples_regr", help="Minimum number samples for regression metric calculation", type=int, default=100)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--run_name", help="Run name for results", type=str, default=None)
+parser.add_argument("--output_dir", help="Ouptut directory (default 'models')", type=str, default="models")
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
@@ -215,11 +216,11 @@ vprint()
 vprint("Saving performance metrics (AUCs) and model.")
 
 #####   model saving   #####
-if not os.path.exists("models"):
-   os.makedirs("models")
+if not os.path.exists(args.output_dir):
+   os.makedirs(args.output_dir)
 
-model_file = f"models/{name}.pt"
-out_file   = f"models/{name}.json"
+model_file = f"{args.output_dir}/{name}.pt"
+out_file   = f"{args.output_dir}/{name}.json"
 
 if args.save_model:
    torch.save(net.state_dict(), model_file)

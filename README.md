@@ -115,7 +115,6 @@ We matrix for `--y_regr` is sparse matrix (similar to classification).
 For which SparseChem minimizes the mean squared error (MSE) loss.
 Note we have also switched the non-linearity to `tanh`.
 
-
 ## Running on CPU or other GPUs
 The default device is `cuda:0`.
 To train the model on CPU just add `--dev cpu` to the arguments.
@@ -123,6 +122,8 @@ Similarly, to choose another GPU, we can specify `--dev cuda:1`.
 
 ## Predicting on new compounds
 After the run is complete the model's **parameters** and **conf** are saved under `models/` folder.
+Note you can change the output directory by providing `--output_dir some_other_dir`.
+
 We then can use `predict.py` to make predictions for new compounds as follows:
 ```bash
 python predict.py \

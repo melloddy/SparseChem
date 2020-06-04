@@ -238,6 +238,8 @@ def load_results(filename):
         data = json.load(f)
 
     data["conf"] = types.SimpleNamespace(**data["conf"])
+    if "fold_inputs" not in data["conf"]:
+        data["conf"].fold_inputs = None
 
     if "results" in data:
         for key in data["results"]:

@@ -40,13 +40,19 @@ if conf.fold_inputs is not None:
 print(f"Input dimension: {ecfp.shape[1]}")
 print(f"#samples:        {ecfp.shape[0]}")
 
-dev  = args.dev
-if conf.model_type == "federated_model1":
-    net = sc.federated_model1(conf).to(dev)
-else:
-    net = sc.SparseFFN(conf).to(dev)
+dev = args.dev
+net = sc.SparseFFN(conf).to(dev)
+state_dict = torch.load(args.model, map_location=torch.device(dev))
 
-net.load_state_dict(torch.load(args.model, map_location=torch.device(dev)))
+if conf.model_type == "federated":
+    state_dict_new = OrderedDict()
+    state_dict_new["net.0.net_freq.weight"] = state_dict["0.0.net_freq.weight"]
+    state_dict_new["net.0.net_freq.bias"]   = state_dict["0.0.net_freq.bias"]
+    state_dict_new["net.2.net.2.weight"]    = state_dict["1.net.2.weight"]
+    state_dict_new["net.2.net.2.bias"]      = state_dict["1.net.2.bias"]
+    state_dict = state_dict_new
+
+net.load_state_dict(state_dict)
 print(f"Model weights:   '{args.model}'")
 print(f"Model config:    '{args.conf}'.")
 

@@ -237,9 +237,9 @@ def load_results(filename):
     with open(filename, "r") as f:
         data = json.load(f)
 
-    data["conf"] = types.SimpleNamespace(**data["conf"])
     if "fold_inputs" not in data["conf"]:
-        data["conf"].fold_inputs = None
+        data["conf"]["fold_inputs"] = None
+    data["conf"] = types.SimpleNamespace(**data["conf"])
 
     if "results" in data:
         for key in data["results"]:

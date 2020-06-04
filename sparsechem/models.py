@@ -159,3 +159,15 @@ class SparseFFN(torch.nn.Module):
             return self.net[-1].net[:-1](H)
         return self.net(X)
 
+def federated_model1(conf):
+    """
+    Federated model in Melloddy, version 1.
+    """
+    head_model = LastNet(conf)
+    trunk_model = nn.Sequential(
+        SparseInputNet(conf),
+        MiddleNet(conf),
+    )
+    return nn.Sequential(trunk_model, head_model)
+
+

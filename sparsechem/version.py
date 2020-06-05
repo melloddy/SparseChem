@@ -1,2 +1,2 @@
 # Copyright (c) 2020 KU Leuven
-__version__ = "0.5.3"
+__version__ = "0.6.0"

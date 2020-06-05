@@ -10,6 +10,7 @@ import sys
 import argparse
 from torch.utils.data import DataLoader
 from scipy.special import expit
+from collections import OrderedDict
 
 parser = argparse.ArgumentParser(description="Using trained model to make predictions.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, required=True)

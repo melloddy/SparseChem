@@ -378,7 +378,8 @@ def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
     if dropout:
         net.apply(enable_dropout)
 
-    y_hat_list = []
+    y_class_list = []
+    y_regr_list  = []
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
@@ -386,11 +387,19 @@ def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            y_hat = net(X, last_hidden=last_hidden)
-            y_hat_list.append(y_hat.cpu())
+            y_class, y_regr = net(X, last_hidden=last_hidden)
+            if net.class_output_size > 0:
+                y_class_list.append(y_class.cpu())
+            if net.regr_output_size > 0:
+                y_regr_list.append(y_regr.cpu())
 
-        y_hat = torch.cat(y_hat_list, dim=0)
-        return y_hat
+    y_class = None
+    y_regr  = None
+    if net.class_output_size > 0:
+        y_class = torch.cat(y_class_list, dim=0)
+    if net.regr_output_size > 0:
+        y_regr  = torch.cat(y_regr_list, dim=0)
+    return y_class, y_regr
 
 def fold_transform_inputs(x, folding_size=None, transform="none"):
     """Fold and transform sparse matrix x:
@@ -491,11 +500,11 @@ def save_results(filename, conf, validation, training):
         json.dump(out, f)
 
 
-def load_results(filename):
+def load_results(filename, two_heads=False):
     """Loads conf and results from a file
     Args:
         filename    name of the json/npy file
-        only_conf   only load the configuration
+        two_heads   set up class_output_size if missing
     """
     if filename.endswith(".npy"):
         return np.load(filename, allow_pickle=True).item()
@@ -506,7 +515,12 @@ def load_results(filename):
     for key in ["model_type"]:
         if key not in data["conf"]:
             data["conf"][key] = None
+    if two_heads and ("class_output_size" not in data["conf"]):
+        data["conf"]["class_output_size"] = data["conf"]["output_size"]
+        data["conf"]["regr_output_size"]  = 0
+
     data["conf"] = types.SimpleNamespace(**data["conf"])
+
 
     if "results" in data:
         for key in data["results"]:

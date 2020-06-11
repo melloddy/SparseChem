@@ -14,7 +14,7 @@ from collections import OrderedDict
 
 parser = argparse.ArgumentParser(description="Using trained model to make predictions.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, required=True)
-parser.add_argument("--outfile", help="Output file for predictions (.npy)", type=str, required=True)
+parser.add_argument("--outprefix", help="Prefix for output files, '-class.npy', '-regr.npy' will be appended.", type=str, required=True)
 parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
@@ -26,7 +26,7 @@ args = parser.parse_args()
 
 print(args)
 
-conf = sc.load_results(args.conf)["conf"]
+conf = sc.load_results(args.conf, two_heads=True)["conf"]
 
 ecfp = sc.load_sparse(args.x)
 ecfp = sc.fold_transform_inputs(ecfp, folding_size=conf.fold_inputs, transform=conf.input_transform)
@@ -55,10 +55,18 @@ dataset_te = sc.SparseDataset(x=ecfp, y=y0)
 loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
 
 out = sc.predict(net, loader_te, dev, last_hidden=args.last_hidden, dropout=args.dropout)
-if args.last_hidden == 0:
-    out = torch.sigmoid(out)
-out = out.numpy()
+class_out, regr_out = out
 
-np.save(args.outfile, out)
-print(f"Saved prediction matrix (numpy) to '{args.outfile}'.")
+if class_out is not None:
+    if args.last_hidden == 0:
+        class_out = torch.sigmoid(class_out)
+    class_out = class_out.numpy()
+    np.save(f"{args.outprefix}-class.npy", class_out)
+    print(f"Saved prediction matrix (numpy) for classification to '{args.outprefix}-class.npy'.")
+
+if regr_out is not None:
+    regr_out = regr_out.numpy()
+    np.save(f"{args.outprefix}-regr.npy", regr_out)
+    print(f"Saved prediction matrix (numpy) for regression to '{args.outprefix}-regr.npy'.")
+
 

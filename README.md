@@ -128,12 +128,13 @@ We then can use `predict.py` to make predictions for new compounds as follows:
 ```bash
 python predict.py \
     --x new_compounds.mtx \
-    --outfile y_hat.npy \
+    --outprefix y_hat \
     --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05.json \
     --model models/sc_chembl_h400.400_ldo0.2_wd1e-05.pt \
     --dev cuda:0
 ```
-where `new_compounds.mtx` is the sparse feature matrix of the new compounds and `--outfile y_hat.npy` specifies the file where the predictions are saved to.
+where `new_compounds.mtx` is the sparse feature matrix of the new compounds and `--outprefix y_hat` specifies the prefix for the file(s) where the predictions are saved to.
+There will be one output file for **classification** tasks and one for **regression** tasks, depending on the model.
 The `--conf` and `--model` should point to the configuration and model files that where saved during the training.
 
 The format for the prediction is a Numpy file that can be loaded as follows:

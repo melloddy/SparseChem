@@ -146,7 +146,7 @@ class LastNet(torch.nn.Module):
 class SparseFFN(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
-        if "class_output_size" in conf:
+        if hasattr(conf, "class_output_size"):
             self.class_output_size = conf.class_output_size
             self.regr_output_size  = conf.regr_output_size
         else:
@@ -158,6 +158,10 @@ class SparseFFN(torch.nn.Module):
             MiddleNet(conf),
             LastNet(conf),
         )
+
+    @property
+    def has_2heads(self):
+        return self.class_output_size is not None
 
     def forward(self, X, last_hidden=False):
         if last_hidden:

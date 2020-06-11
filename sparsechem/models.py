@@ -171,15 +171,3 @@ class SparseFFN(torch.nn.Module):
         if self.regr_output_size == 0:  return out, None
         return out[:, :self.class_output_size], out[:, self.class_output_size:]
 
-def federated_model1(conf):
-    """
-    Federated model in Melloddy, version 1.
-    """
-    head_model = LastNet(conf)
-    trunk_model = nn.Sequential(
-        SparseInputNet(conf),
-        MiddleNet(conf),
-    )
-    return nn.Sequential(trunk_model, head_model)
-
-

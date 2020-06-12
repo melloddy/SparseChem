@@ -134,7 +134,8 @@ python predict.py \
     --dev cuda:0
 ```
 where `new_compounds.mtx` is the sparse feature matrix of the new compounds and `--outprefix y_hat` specifies the prefix for the file(s) where the predictions are saved to.
-There will be one output file for **classification** tasks and one for **regression** tasks, depending on the model.
+In this example, the output file for **classification** tasks will be `y_hat-class.npy` and for **regression** tasks `y_hat-regr.npy`,
+assuming that the model has both types of tasks.
 The `--conf` and `--model` should point to the configuration and model files that where saved during the training.
 
 The format for the prediction is a Numpy file that can be loaded as follows:

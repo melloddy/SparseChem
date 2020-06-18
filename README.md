@@ -153,3 +153,42 @@ This can be done by adding the option `--last_hidden 1`.
 
 Then the output file will contain the numpy matrix of the hidden vectors, which can be loaded the same way as predictions.
 
+
+
+## Full list of all command line arguments
+
+* __--x__: Descriptor file (matrix or numpy) (str)
+* __--y_class | --y | --y_classification__: Activity file (matrix or numpy (str)
+* __--y_regr | --y_regression__: Activity file (matrix or numpy) (str)
+* __--weights_class | --task_weights | --weights_classification__: CSV file with columns task_id, weight (for classification tasks) (str)
+* __--weights_regr | --weights_regression__: CSV file with columns task_id, weight (for regression tasks) (str)
+* __--folding__: Folding file (npy) (str, folding_hier_0.6.npy)
+* __--fold_va__: Validation fold number (int, default=0)
+* __--fold_te__: Test fold number (removed from dataset) (int)
+* __--batch_ratio__: Batch ratio (float, default=0.02)
+* __--internal_batch_max__: Maximum size of the internal batch (int)
+* __--hidden_sizes__: Hidden sizes (int) (default: [])
+* __--middle_dropout__: Dropout for layers before the last (float, default=0.0)
+* __--last_dropout__: Last dropout (float, default=0.2)
+* __--weight_decay__: Weight decay (float, default=0.0)
+* __--last_non_linearity__: Last layer non-linearity (str, default="relu", choices=["relu", "tanh"])
+* __--non_linearity__: Before last layer non-linearity (str, default="relu", choices=["relu", "tanh"])
+* __--input_transform__: Transformation to apply to inputs (str, default="binarize", choices=["binarize", "none", "tanh"])
+* __--lr__: Learning rate (float, default=1e-3)
+* __--lr_alpha__: Learning rate decay multiplier (float, default=0.3)
+* __--lr_steps__: Learning rate decay steps (int, default=[10])
+* __--input_size_freq__: Number of high importance features (int)
+* __--fold_inputs__: Fold input to a fixed set (default no folding) (int)
+* __--epochs__: Number of epochs (type=int, default=20)
+* __--min_samples_auc__: Minimum number samples (in each class) for AUC calculation" (int, default=25)
+* __--min_samples_regr__: Minimum number samples for regression metric calculation (int, default=100)
+* __--dev__: Compute device to use (str, default="cuda:0", possible ["cpu","cuda:X"])
+* __--run_name__: Run name for results (str)
+* __--output_dir__: Ouptut directory (str, default="models")
+* __--prefix__: Prefix for run name (str, default='run')
+* __--verbose__: Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
+* __--save_model__: Set this to 0 if the model should not be saved (int, default=1)
+* __--eval_train__: Set this to 1 to calculate AUCs for train data (int, default=0)
+* __--eval_frequency__: The gap between AUC eval (in epochs), -1 means to do an eval at the end. (int, default=1)
+
+

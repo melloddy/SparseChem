@@ -1,5 +1,6 @@
 # Copyright (c) 2020 KU Leuven
 from .models import SparseLinear, SparseInputNet, SparseFFN, LastNet, MiddleNet, sparse_split2
+from .models import censored_mse_loss, censored_mae_loss
 from .data import SparseDataset, sparse_collate
 from .data import ClassRegrSparseDataset, sparse_collate
 from .utils import all_metrics, compute_metrics, evaluate_binary, train_binary, train_class_regr, evaluate_class_regr

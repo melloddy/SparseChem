@@ -253,7 +253,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     X = torch.sparse_coo_tensor(
         b["x_ind"],
         b["x_data"],
-        size = [b["batch_size"], input_size]).to(dev)
+        size = [b["batch_size"], input_size]).to(dev, non_blocking=True)
 
     yc_hat_all, yr_hat_all = net(X)
 
@@ -264,9 +264,9 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     out["yr_loss"]    = 0
 
     if out["yc_hat_all"] is not None:
-        yc_ind  = b["yc_ind"].to(dev)
+        yc_ind  = b["yc_ind"].to(dev, non_blocking=True)
         yc_w    = weights_class[yc_ind[1]]
-        yc_data = b["yc_data"].to(dev)
+        yc_data = b["yc_data"].to(dev, non_blocking=True)
         yc_hat  = yc_hat_all[yc_ind[0], yc_ind[1]]
         out["yc_ind"]  = yc_ind
         out["yc_data"] = yc_data
@@ -274,14 +274,15 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yc_loss"] = (loss_class(yc_hat, yc_data) * yc_w).sum()
 
     if out["yr_hat_all"] is not None:
-        yr_ind  = b["yr_ind"].to(dev)
+        yr_ind  = b["yr_ind"].to(dev, non_blocking=True)
         yr_w    = weights_regr[yr_ind[1]]
-        yr_data = b["yr_data"].to(dev)
+        yr_data = b["yr_data"].to(dev, non_blocking=True)
         yr_hat  = yr_hat_all[yr_ind[0], yr_ind[1]]
+        out["ycen_data"] = b["ycen_data"].to(dev, non_blocking=True)
         out["yr_ind"]  = yr_ind
         out["yr_data"] = yr_data
         out["yr_hat"]  = yr_hat
-        out["yr_loss"] = (loss_regr(yr_hat, yr_data) * yr_w).sum()
+        out["yr_loss"] = (loss_regr(input=yr_hat, target=yr_data, censor=out["ycen_data"]) * yr_w).sum()
 
     return out
 

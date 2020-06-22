@@ -175,3 +175,29 @@ class SparseFFN(torch.nn.Module):
         if self.regr_output_size == 0:  return out, None
         return out[:, :self.class_output_size], out[:, self.class_output_size:]
 
+def censored_mse_loss(input, target, censor):
+    """
+    Computes for each value the censored MSE loss.
+    Args:
+        input     tensor of predicted values
+        target    tensor of true values
+        censor    tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = torch.where(censor==0, y_diff, torch.relu(censor * y_diff))
+    return torch.pow(y_diff, 2)
+
+def censored_mae_loss(input, target, y_censor):
+    """
+    Computes for each value the censored MAE loss.
+    Args:
+        input    tensor of predicted values
+        target   tensor of true values
+        censor   tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = torch.where(censor==0, y_diff, torch.relu(censor * y_diff))
+    return torch.abs(y_diff)
+

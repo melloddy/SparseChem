@@ -15,7 +15,7 @@ class SparseDataset(Dataset):
 
         self.x = x.tocsr(copy=False).astype(np.float32)
         self.y = y.tocsr(copy=False).astype(np.float32)
-        # scale labels from {-1, -1} to {0, 1}, zeros are stored explicitly
+        # scale labels from {-1, +1} to {0, 1}, zeros are stored explicitly
         self.y.data = (self.y.data + 1) / 2.0
 
     def __len__(self):
@@ -94,15 +94,25 @@ def to_idx_tensor(idx_list):
     xcol = np.concatenate(idx_list)
     return torch.LongTensor([xrow, xcol])
 
+def patterns_match(x, y):
+    if y.shape != x.shape:             return False
+    if y.nnz != x.nnz:                 return False
+    if (y.indices != x.indices).any(): return False
+    if (y.indptr != x.indptr).any():   return False
+    return True
+
 class ClassRegrSparseDataset(Dataset):
-    def __init__(self, x, y_class, y_regr):
+    def __init__(self, x, y_class, y_regr, y_censor=None):
         '''
         Creates dataset for two outputs Y.
         Args:
             x (sparse matrix):        input [n_sampes, features_in]
             y_class (sparse matrix):  class data [n_samples, class_tasks]
             y_regr (sparse matrix):   regression data [n_samples, regr_tasks]
+            y_censor (sparse matrix): censoring matrix, for regression data [n_samples, regr_task]
         '''
+        if y_censor is None:
+            y_censor = scipy.sparse.csr_matrix(y_regr.shape)
         assert y_class.shape[1] + y_regr.shape[1] > 0, "No labels provided (both y_class and y_regr are missing)"
         assert x.shape[0]==y_class.shape[0], f"Input has {x.shape[0]} rows and class data {y_class.shape[0]} rows. Must be equal."
         assert x.shape[0]==y_regr.shape[0], f"Input has {x.shape[0]} rows and regression data has {y_regr.shape[0]} rows. Must be equal."
@@ -110,8 +120,14 @@ class ClassRegrSparseDataset(Dataset):
         self.x       = x.tocsr(copy=False).astype(np.float32)
         self.y_class = y_class.tocsr(copy=False).astype(np.float32)
         self.y_regr  = y_regr.tocsr(copy=False).astype(np.float32)
+        self.y_censor = y_censor.tocsr(copy=False).astype(np.float32)
 
-        # scale labels from {-1, -1} to {0, 1}, zeros are stored explicitly
+        if self.y_censor.nnz > 0:
+            assert patterns_match(self.y_regr, self.y_censor), "y_regr and y_censor must have the same shape and sparsity pattern (nnz, indices and indptr)"
+            d = self.y_censor.data
+            assert ((d == -1) | (d == 0) | (d == 1)).all(), "Values of regression censor (y_censor) must be either -1, 0 or 1."
+
+        # scale labels from {-1, +1} to {0, 1}, zeros are stored explicitly
         self.y_class.data = (self.y_class.data + 1) / 2.0
 
     def __len__(self):
@@ -142,6 +158,9 @@ class ClassRegrSparseDataset(Dataset):
 
         if self.regr_output_size > 0:
             out["yr_ind"], out["yr_data"] = get_row(self.y_regr, idx)
+            if self.y_censor.nnz > 0:
+                out["ycen_ind"], out["ycen_data"] = get_row(self.y_censor, idx)
+
         return out
 
     def batch_to_x(self, batch, dev):
@@ -171,6 +190,13 @@ class ClassRegrSparseDataset(Dataset):
         if "yr_ind" in lists:
             out["yr_ind"]  = to_idx_tensor(lists["yr_ind"])
             out["yr_data"] = torch.from_numpy(np.concatenate(lists["yr_data"]))
+
+        if "ycen_ind" in lists:
+            out["ycen_ind"]  = to_idx_tensor(lists["ycen_ind"])
+            out["ycen_data"] = torch.from_numpy(np.concatenate(lists["ycen_data"]))
+        else:
+            out["ycen_ind"]  = None
+            out["ycen_data"] = None
 
         out["batch_size"] = len(batch)
         return out

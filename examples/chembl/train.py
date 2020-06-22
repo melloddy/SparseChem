@@ -156,7 +156,7 @@ args.regr_output_size  = dataset_tr.regr_output_size
 dev  = torch.device(args.dev)
 net  = sc.SparseFFN(args).to(dev)
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")
-loss_regr  = torch.nn.MSELoss(reduction="none")
+loss_regr  = sc.censored_mse_loss
 
 if weights_class is not None: weights_class = weights_class.to(dev)
 if weights_regr is not None: weights_regr = weights_regr.to(dev)

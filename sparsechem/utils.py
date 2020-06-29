@@ -46,7 +46,8 @@ def compute_corr(x, y):
         return np.nan
     return np.dot((x - x.mean()), (y - y.mean())) / len(y) / y.std() / x.std()
 
-def all_metrics_regr(y_true, y_score):
+def all_metrics_regr(y_true, y_score, y_censor=None):
+    ## TODO: modify to use y_censor
     if len(y_true) <= 1:
         df = pd.DataFrame({"rmse": [np.nan], "rsquared": [np.nan], "corrcoef": [np.nan]})
         return df
@@ -81,20 +82,26 @@ def compute_metrics(cols, y_true, y_score, num_tasks):
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
-def compute_metrics_regr(cols, y_true, y_score, num_tasks):
+def compute_metrics_regr(cols, y_true, y_score, num_tasks, y_censor=None):
     """Returns metrics for regression tasks."""
     if len(cols) < 1:
         return pd.DataFrame({
             "rmse": np.nan,
             "rsquared": np.nan,
-            "corr": np.nan,
+            "corrcoef": np.nan,
             },
             index=np.arange(num_tasks))
-    df = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
+    df = pd.DataFrame({
+        "task": cols,
+        "y_true": y_true,
+        "y_score": y_score,
+        "y_censor": y_censor,
+    })
     metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics_regr(
                   y_true  = g.y_true.values,
-                  y_score = g.y_score.values))
+                  y_score = g.y_score.values,
+                  y_censor = g.y_censor.values))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
@@ -140,7 +147,7 @@ columns_cr = [
     Column(None,            size=1, dec=-1, title="|"),
     Column("rmse",          size=9, dec= 5, title="rmse"),
     Column("rsquared",      size=9, dec= 5, title="rsquared"),
-    Column("corrcoef",      size=9, dec= 5, title="corrcoef"),
+    Column("corrcoef",          size=9, dec= 5, title="corrcoef"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("train_time",    size=6, dec= 1, title="tr_time"),
 ]
@@ -278,7 +285,11 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         yr_w    = weights_regr[yr_ind[1]]
         yr_data = b["yr_data"].to(dev, non_blocking=True)
         yr_hat  = yr_hat_all[yr_ind[0], yr_ind[1]]
-        out["ycen_data"] = b["ycen_data"].to(dev, non_blocking=True)
+
+        out["ycen_data"] = b["ycen_data"]
+        if out["ycen_data"] is not None:
+            out["ycen_data"] = out["ycen_data"].to(dev, non_blocking=True)
+
         out["yr_ind"]  = yr_ind
         out["yr_data"] = yr_data
         out["yr_hat"]  = yr_hat

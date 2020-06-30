@@ -12,6 +12,7 @@ import sys
 import os.path
 import time
 import json
+from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
@@ -44,10 +45,11 @@ parser.add_argument("--min_samples_auc", help="Minimum number samples (in each c
 parser.add_argument("--min_samples_regr", help="Minimum number samples for regression metric calculation", type=int, default=100)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--run_name", help="Run name for results", type=str, default=None)
-parser.add_argument("--output_dir", help="Output directory (default 'models')", type=str, default="models")
+parser.add_argument("--output_dir", help="Output directory, including boards (default 'models')", type=str, default="models")
 parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
+parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 
@@ -67,8 +69,11 @@ else:
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
 vprint(f"Run name is '{name}'.")
 
-tb_name = os.path.join(args.output_dir, "boards", name)
-writer  = SummaryWriter(tb_name)
+if args.save_board:
+    tb_name = os.path.join(args.output_dir, "boards", name)
+    writer  = SummaryWriter(tb_name)
+else:
+    writer = Nothing()
 assert args.input_size_freq is None, "Using tail compression not yet supported."
 
 if (args.y_class is None) and (args.y_regr is None):

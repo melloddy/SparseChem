@@ -1,6 +1,7 @@
 # Copyright (c) 2020 KU Leuven
 import torch
 import math
+import numpy as np
 from torch import nn
 
 non_linearities = {
@@ -186,9 +187,9 @@ def censored_mse_loss(input, target, censor):
     y_diff = target - input
     if censor is not None:
         y_diff = torch.where(censor==0, y_diff, torch.relu(censor * y_diff))
-    return torch.pow(y_diff, 2)
+    return y_diff * y_diff
 
-def censored_mae_loss(input, target, y_censor):
+def censored_mae_loss(input, target, censor):
     """
     Computes for each value the censored MAE loss.
     Args:
@@ -201,3 +202,28 @@ def censored_mae_loss(input, target, y_censor):
         y_diff = torch.where(censor==0, y_diff, torch.relu(censor * y_diff))
     return torch.abs(y_diff)
 
+def censored_mse_loss_numpy(input, target, censor):
+    """
+    Computes for each value the censored MSE loss in *Numpy*.
+    Args:
+        input     tensor of predicted values
+        target    tensor of true values
+        censor    tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = np.where(censor==0, y_diff, np.clip(censor * y_diff, a_min=0, a_max=None))
+    return y_diff * y_diff
+
+def censored_mae_loss_numpy(input, target, censor):
+    """
+    Computes for each value the censored MSE loss in *Numpy*.
+    Args:
+        input     tensor of predicted values
+        target    tensor of true values
+        censor    tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = np.where(censor==0, y_diff, np.clip(censor * y_diff, a_min=0, a_max=None))
+    return np.abs(y_diff)

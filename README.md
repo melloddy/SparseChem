@@ -115,6 +115,13 @@ We matrix for `--y_regr` is sparse matrix (similar to classification).
 For which SparseChem minimizes the mean squared error (MSE) loss.
 Note we have also switched the non-linearity to `tanh`.
 
+## Censored regression
+It is possible to use censored regression by passing an extra sparse matrix with `--y_censor chembl_censor.mtx` that has the same sparsity pattern as `y_regr`.
+The censor matrix should store the censoring mask for each regression value:
+* `-1` for below censoring
+* `0` for no censoring (usual regression)
+* `+1` for upper censoring
+
 ## Running on CPU or other GPUs
 The default device is `cuda:0`.
 To train the model on CPU just add `--dev cpu` to the arguments.
@@ -160,6 +167,7 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 * __--x__: Descriptor file (matrix or numpy) (str)
 * __--y_class | --y | --y_classification__: Activity file (matrix or numpy (str)
 * __--y_regr | --y_regression__: Activity file (matrix or numpy) (str)
+* __--y_censor__: Censor mask for regression (matrix market or numpy)
 * __--weights_class | --task_weights | --weights_classification__: CSV file with columns task_id, weight (for classification tasks) (str)
 * __--weights_regr | --weights_regression__: CSV file with columns task_id, weight (for regression tasks) (str)
 * __--folding__: Folding file (npy) (str, folding_hier_0.6.npy)
@@ -184,10 +192,11 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 * __--min_samples_regr__: Minimum number samples for regression metric calculation (int, default=100)
 * __--dev__: Compute device to use (str, default="cuda:0", possible ["cpu","cuda:X"])
 * __--run_name__: Run name for results (str)
-* __--output_dir__: Ouptut directory (str, default="models")
+* __--output_dir__: Output directory, including boards (str, default="models")
 * __--prefix__: Prefix for run name (str, default='run')
 * __--verbose__: Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 * __--save_model__: Set this to 0 if the model should not be saved (int, default=1)
+* __--save_board__: Set this to 0 if the TensorBoard should not be saved
 * __--eval_train__: Set this to 1 to calculate AUCs for train data (int, default=0)
 * __--eval_frequency__: The gap between AUC eval (in epochs), -1 means to do an eval at the end. (int, default=1)
 

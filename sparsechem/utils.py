@@ -8,6 +8,8 @@ import scipy.sparse
 import scipy.io
 import types
 import json
+import warnings
+from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 
 class Nothing(object):
@@ -55,20 +57,24 @@ def compute_corr(x, y):
     return np.dot((x - x.mean()), (y - y.mean())) / len(y) / y.std() / x.std()
 
 def all_metrics_regr(y_true, y_score, y_censor=None):
-    ## TODO: modify to use y_censor
     if len(y_true) <= 1:
         df = pd.DataFrame({"rmse": [np.nan], "rsquared": [np.nan], "corrcoef": [np.nan]})
         return df
-    mse  = ((y_true - y_score)**2).mean()
-    yvar = y_true.var()
-    if yvar == 0:
+    ## censor0 means non-censored observations
+    censor0 = y_censor == 0 if y_censor is not None else slice(None)
+    mse_cen = censored_mse_loss_numpy(target=y_true, input=y_score, censor=y_censor).mean()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        mse  = ((y_true[censor0] - y_score[censor0])**2).mean()
+        yvar = y_true[censor0].var()
+    if yvar == 0 or np.isnan(yvar):
         rsquared = np.nan
         corr = np.nan
     else:
-        rsquared = 1 - mse / y_true.var()
-        corr     = compute_corr(y_true, y_score)
+        rsquared = 1 - mse / yvar
+        corr     = compute_corr(y_true[censor0], y_score[censor0])
     df = pd.DataFrame({
-        "rmse":     [np.sqrt(mse)],
+        "rmse":     [np.sqrt(mse_cen)],
         "rsquared": [rsquared],
         "corrcoef": [corr],
     })
@@ -109,7 +115,7 @@ def compute_metrics_regr(cols, y_true, y_score, num_tasks, y_censor=None):
               all_metrics_regr(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values,
-                  y_censor = g.y_censor.values))
+                  y_censor = g.y_censor.values if y_censor is not None else None))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
@@ -339,6 +345,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weigh
         "yr_ind":  [],
         "yr_data": [],
         "yr_hat":  [],
+        "ycen_data": [],
     }
     num_class_tasks  = loader.dataset.class_output_size
     num_regr_tasks   = loader.dataset.regr_output_size
@@ -351,7 +358,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weigh
 
             ## storing data for AUCs
             for key in data.keys():
-                if key in fwd:
+                if (key in fwd) and (fwd[key] is not None):
                     data[key].append(fwd[key].cpu())
 
         out = {}
@@ -375,7 +382,11 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weigh
             yr_ind  = torch.cat(data["yr_ind"], dim=1).numpy()
             yr_data = torch.cat(data["yr_data"], dim=0).numpy()
             yr_hat  = torch.cat(data["yr_hat"], dim=0).numpy()
-            out["regression"] = compute_metrics_regr(yr_ind[1], y_true=yr_data, y_score=yr_hat, num_tasks=num_regr_tasks)
+            if len(data["ycen_data"]) > 0:
+                ycen_data = torch.cat(data["ycen_data"], dim=0).numpy()
+            else:
+                ycen_data = None
+            out["regression"] = compute_metrics_regr(yr_ind[1], y_true=yr_data, y_score=yr_hat, y_censor=ycen_data, num_tasks=num_regr_tasks)
             out["regression_agg"] = out["regression"].reindex(labels=regr_cols).mean(0)
             out["regression_agg"]["mseloss"] = loss_regr_sum.cpu().item() / yr_hat.shape[0]
 

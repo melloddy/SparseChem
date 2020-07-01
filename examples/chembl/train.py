@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser(description="Training a multi-task model.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--y_censor", help="Censor mask for regression (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, weight (for classification tasks)", type=str, default=None)
 parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, weight (for regression tasks)", type=str, default=None)
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
@@ -79,14 +80,19 @@ assert args.input_size_freq is None, "Using tail compression not yet supported."
 if (args.y_class is None) and (args.y_regr is None):
     raise ValueError("No label data specified, please add --y_class and/or --y_regr.")
 
-ecfp    = sc.load_sparse(args.x)
-y_class = sc.load_sparse(args.y_class)
-y_regr  = sc.load_sparse(args.y_regr)
+ecfp     = sc.load_sparse(args.x)
+y_class  = sc.load_sparse(args.y_class)
+y_regr   = sc.load_sparse(args.y_regr)
+y_censor = sc.load_sparse(args.y_censor)
 
+if (y_regr is None) and (y_censor is not None):
+    raise ValueError("y_censor provided please also provide --y_regr.")
 if y_class is None:
     y_class = scipy.sparse.csr_matrix((ecfp.shape[0], 0))
 if y_regr is None:
     y_regr  = scipy.sparse.csr_matrix((ecfp.shape[0], 0))
+if y_censor is None:
+    y_censor = scipy.sparse.csr_matrix(y_regr.shape)
 
 folding = np.load(args.folding)
 assert ecfp.shape[0] == folding.shape[0], "x and folding must have same number of rows"
@@ -122,6 +128,7 @@ if args.fold_te is not None:
     ecfp    = ecfp[keep]
     y_class = y_class[keep]
     y_regr  = y_regr[keep]
+    y_censor = y_censor[keep]
     folding = folding[keep]
 
 fold_va = args.fold_va
@@ -132,6 +139,8 @@ y_class_tr = y_class[idx_tr]
 y_class_va = y_class[idx_va]
 y_regr_tr  = y_regr[idx_tr]
 y_regr_va  = y_regr[idx_va]
+y_censor_tr = y_censor[idx_tr]
+y_censor_va = y_censor[idx_va]
 
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
@@ -146,8 +155,8 @@ if args.internal_batch_max is not None:
         batch_size      = int(np.ceil(batch_size / num_int_batches))
 vprint(f"#internal batch size:   {batch_size}")
 
-dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr)
-dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va)
+dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr, y_censor=y_censor_tr)
+dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va, y_censor=y_censor_va)
 
 loader_tr = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 8, pin_memory=True, collate_fn=dataset_tr.collate, shuffle=True)
 loader_va = DataLoader(dataset_va, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=dataset_va.collate, shuffle=False)

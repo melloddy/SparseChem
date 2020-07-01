@@ -116,6 +116,7 @@ class ClassRegrSparseDataset(Dataset):
         assert y_class.shape[1] + y_regr.shape[1] > 0, "No labels provided (both y_class and y_regr are missing)"
         assert x.shape[0]==y_class.shape[0], f"Input has {x.shape[0]} rows and class data {y_class.shape[0]} rows. Must be equal."
         assert x.shape[0]==y_regr.shape[0], f"Input has {x.shape[0]} rows and regression data has {y_regr.shape[0]} rows. Must be equal."
+        assert y_regr.shape==y_censor.shape, f"Regression data has shape {y_regr.shape} and censor data has shape {y_censor.shape[0]}. Must be equal."
 
         self.x       = x.tocsr(copy=False).astype(np.float32)
         self.y_class = y_class.tocsr(copy=False).astype(np.float32)

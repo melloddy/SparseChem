@@ -87,9 +87,42 @@ def test_regression(data_dir="test_chembl23", rm_output=True):
         f" --folding ./{data_dir}/folding_hier_0.6.npy" +
         f" --output_dir {output_dir}" +
         f" --hidden_sizes 20" +
-        f" --epochs 4" +
+        f" --epochs 2" +
         f" --lr 1e-3" +
-        f" --lr_steps 3" +
+        f" --lr_steps 1" +
+        f" --verbose 1"
+    )
+
+    download_chembl23(data_dir)
+    res = subprocess.run(cmd.split())
+    assert res.returncode == 0
+    assert os.path.isdir(os.path.join(output_dir, "boards"))
+    conf_file  = glob.glob(f"{output_dir}/*.json")[0]
+    model_file = glob.glob(f"{output_dir}/*.pt")[0]
+
+    results = sc.load_results(conf_file)
+
+    assert "conf" in results
+    assert "validation" in results
+
+    assert results["validation"]["regression"].shape[0] > 0
+
+    if rm_output:
+        shutil.rmtree(output_dir)
+
+def test_classification_regression(data_dir="test_chembl23", rm_output=True):
+    rstr = random_str(12)
+    output_dir = f"./{data_dir}/models-{rstr}/"
+    cmd = (
+        f"python train.py --x ./{data_dir}/chembl_23_x.npy" +
+        f" --y_class ./{data_dir}/chembl_23_y.npy" +
+        f" --y_regr ./{data_dir}/chembl_23_y.npy" +
+        f" --folding ./{data_dir}/folding_hier_0.6.npy" +
+        f" --output_dir {output_dir}" +
+        f" --hidden_sizes 20" +
+        f" --epochs 2" +
+        f" --lr 1e-3" +
+        f" --lr_steps 1" +
         f" --verbose 1"
     )
 
@@ -147,3 +180,4 @@ if __name__ == "__main__":
     test_noboard()
     test_regression()
     test_regression_censor()
+    test_classification_regression()

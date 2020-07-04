@@ -110,7 +110,7 @@ ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=a
 
 num_pos    = np.array((y_class == +1).sum(0)).flatten()
 num_neg    = np.array((y_class == -1).sum(0)).flatten()
-num_regr   = np.bincount(y_regr.indices)
+num_regr   = np.bincount(y_regr.indices, minlength=y_regr.shape[1])
 class_cols = np.where((num_pos >= args.min_samples_auc) & (num_neg >= args.min_samples_auc))[0]
 regr_cols  = np.where(num_regr >= args.min_samples_regr)[0]
 
@@ -144,7 +144,7 @@ y_censor_va = y_censor[idx_va]
 
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
-num_regr_va = np.bincount(y_regr_va.indices)
+num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
 
 batch_size  = int(np.ceil(args.batch_ratio * idx_tr.shape[0]))
 num_int_batches = 1

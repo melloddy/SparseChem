@@ -14,7 +14,7 @@ def download_chembl23(data_dir="test_chembl23", remove_previous=False):
     if not os.path.isdir(data_dir):
         os.mkdir(data_dir)
 
-    files = ["chembl_23_x.npy", "chembl_23_y.npy", "folding_hier_0.6.npy"]
+    files = ["chembl_23mini_x.npy", "chembl_23mini_y.npy", "chembl_23mini_folds.npy"]
     url   = "https://www.esat.kuleuven.be/~jsimm/"
     for f in files:
         if not os.path.isfile(os.path.join(data_dir, f)):
@@ -29,9 +29,10 @@ def test_classification(data_dir="test_chembl23", rm_output=True):
     output_dir = f"./{data_dir}/models-{rstr}/"
 
     cmd = (
-        f"python train.py --x ./{data_dir}/chembl_23_x.npy" +
-        f" --y_class ./{data_dir}/chembl_23_y.npy" +
-        f" --folding ./{data_dir}/folding_hier_0.6.npy" +
+        f"python train.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_class ./{data_dir}/chembl_23mini_y.npy" +
+        f" --folding ./{data_dir}/chembl_23mini_folds.npy" +
+        f" --batch_ratio 0.1" +
         f" --output_dir {output_dir}" +
         f" --hidden_sizes 20" +
         f" --epochs 3" +
@@ -62,9 +63,10 @@ def test_noboard(data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
-        f"python train.py --x ./{data_dir}/chembl_23_x.npy" +
-        f" --y_class ./{data_dir}/chembl_23_y.npy" +
-        f" --folding ./{data_dir}/folding_hier_0.6.npy" +
+        f"python train.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_class ./{data_dir}/chembl_23mini_y.npy" +
+        f" --folding ./{data_dir}/chembl_23mini_folds.npy" +
+        f" --batch_ratio 0.1" +
         f" --output_dir {output_dir}" +
         f" --hidden_sizes 20" +
         f" --epochs 1" +
@@ -82,9 +84,10 @@ def test_regression(data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
-        f"python train.py --x ./{data_dir}/chembl_23_x.npy" +
-        f" --y_regr ./{data_dir}/chembl_23_y.npy" +
-        f" --folding ./{data_dir}/folding_hier_0.6.npy" +
+        f"python train.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_regr ./{data_dir}/chembl_23mini_y.npy" +
+        f" --folding ./{data_dir}/chembl_23mini_folds.npy" +
+        f" --batch_ratio 0.1" +
         f" --output_dir {output_dir}" +
         f" --hidden_sizes 20" +
         f" --epochs 2" +
@@ -114,10 +117,11 @@ def test_classification_regression(data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
-        f"python train.py --x ./{data_dir}/chembl_23_x.npy" +
-        f" --y_class ./{data_dir}/chembl_23_y.npy" +
-        f" --y_regr ./{data_dir}/chembl_23_y.npy" +
-        f" --folding ./{data_dir}/folding_hier_0.6.npy" +
+        f"python train.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_class ./{data_dir}/chembl_23mini_y.npy" +
+        f" --y_regr ./{data_dir}/chembl_23mini_y.npy" +
+        f" --folding ./{data_dir}/chembl_23mini_folds.npy" +
+        f" --batch_ratio 0.1" +
         f" --output_dir {output_dir}" +
         f" --hidden_sizes 20" +
         f" --epochs 2" +
@@ -147,10 +151,11 @@ def test_regression_censor(data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
-        f"python train.py --x ./{data_dir}/chembl_23_x.npy" +
-        f" --y_regr ./{data_dir}/chembl_23_y.npy" +
-        f" --y_censor ./{data_dir}/chembl_23_y.npy" +
-        f" --folding ./{data_dir}/folding_hier_0.6.npy" +
+        f"python train.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_regr ./{data_dir}/chembl_23mini_y.npy" +
+        f" --y_censor ./{data_dir}/chembl_23mini_y.npy" +
+        f" --folding ./{data_dir}/chembl_23mini_folds.npy" +
+        f" --batch_ratio 0.1" +
         f" --output_dir {output_dir}" +
         f" --hidden_sizes 20" +
         f" --epochs 2" +

@@ -24,7 +24,7 @@ def download_chembl23(data_dir="test_chembl23", remove_previous=False):
 def random_str(size):
     return "".join([string.ascii_lowercase[i] for i in np.random.randint(0, 26, size=12)])
 
-def test_classification(data_dir="test_chembl23", rm_output=True):
+def test_classification(dev, data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
 
@@ -38,6 +38,7 @@ def test_classification(data_dir="test_chembl23", rm_output=True):
         f" --epochs 3" +
         f" --lr 1e-3" +
         f" --lr_steps 2" +
+        f" --dev {dev}" +
         f" --verbose 1"
     )
 
@@ -59,7 +60,7 @@ def test_classification(data_dir="test_chembl23", rm_output=True):
     if rm_output:
         shutil.rmtree(output_dir)
 
-def test_noboard(data_dir="test_chembl23", rm_output=True):
+def test_noboard(dev, data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
@@ -71,6 +72,7 @@ def test_noboard(data_dir="test_chembl23", rm_output=True):
         f" --hidden_sizes 20" +
         f" --epochs 1" +
         f" --save_board 0" +
+        f" --dev {dev}" +
         f" --verbose 0"
     )
     download_chembl23(data_dir)
@@ -80,7 +82,7 @@ def test_noboard(data_dir="test_chembl23", rm_output=True):
     if rm_output:
         shutil.rmtree(output_dir)
 
-def test_regression(data_dir="test_chembl23", rm_output=True):
+def test_regression(dev, data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
@@ -93,6 +95,7 @@ def test_regression(data_dir="test_chembl23", rm_output=True):
         f" --epochs 2" +
         f" --lr 1e-3" +
         f" --lr_steps 1" +
+        f" --dev {dev}" +
         f" --verbose 1"
     )
 
@@ -113,7 +116,7 @@ def test_regression(data_dir="test_chembl23", rm_output=True):
     if rm_output:
         shutil.rmtree(output_dir)
 
-def test_classification_regression(data_dir="test_chembl23", rm_output=True):
+def test_classification_regression(dev, data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
@@ -127,6 +130,7 @@ def test_classification_regression(data_dir="test_chembl23", rm_output=True):
         f" --epochs 2" +
         f" --lr 1e-3" +
         f" --lr_steps 1" +
+        f" --dev {dev}" +
         f" --verbose 1"
     )
 
@@ -147,7 +151,7 @@ def test_classification_regression(data_dir="test_chembl23", rm_output=True):
     if rm_output:
         shutil.rmtree(output_dir)
 
-def test_regression_censor(data_dir="test_chembl23", rm_output=True):
+def test_regression_censor(dev, data_dir="test_chembl23", rm_output=True):
     rstr = random_str(12)
     output_dir = f"./{data_dir}/models-{rstr}/"
     cmd = (
@@ -161,6 +165,7 @@ def test_regression_censor(data_dir="test_chembl23", rm_output=True):
         f" --epochs 2" +
         f" --lr 1e-3" +
         f" --lr_steps 3" +
+        f" --dev {dev}" +
         f" --verbose 1"
     )
 
@@ -181,8 +186,8 @@ def test_regression_censor(data_dir="test_chembl23", rm_output=True):
         shutil.rmtree(output_dir)
 
 if __name__ == "__main__":
-    test_classification()
-    test_noboard()
-    test_regression()
-    test_regression_censor()
-    test_classification_regression()
+    test_classification(dev="cuda:0")
+    test_noboard(dev="cuda:0")
+    test_regression(dev="cuda:0")
+    test_regression_censor(dev="cuda:0")
+    test_classification_regression(dev="cuda:0")

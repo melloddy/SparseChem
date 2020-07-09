@@ -106,8 +106,8 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
             logloss_count += y_data.shape[0]
 
             ## storing data for AUCs
-            y_ind_list.append(y_ind.cpu())
-            y_true_list.append(y_data.cpu())
+            y_ind_list.append(b["y_ind"])
+            y_true_list.append(b["y_data"])
             y_hat_list.append(y_hat.cpu())
 
         if len(y_ind_list) == 0:
@@ -185,10 +185,50 @@ def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
             y_hat = net(X, last_hidden=last_hidden)
+            if not last_hidden:
+                y_hat = torch.sigmoid(y_hat)
             y_hat_list.append(y_hat.cpu())
 
         y_hat = torch.cat(y_hat_list, dim=0)
         return y_hat
+
+def predict_sparse(net, loader, dev, progress=True, dropout=False):
+    """
+    Makes predictions for all compounds in the loader.
+    Returns sparse matrix of the shape loader.dataset.y.
+    """
+    net.eval()
+    if dropout:
+        net.apply(enable_dropout)
+
+    y_row_list = []
+    y_col_list = []
+    y_hat_list = []
+
+    with torch.no_grad():
+        row_count = 0
+        for b in tqdm(loader, leave=False, disable=(progress == False)):
+            X = torch.sparse_coo_tensor(
+                    b["x_ind"],
+                    b["x_data"],
+                    size = [b["batch_size"], loader.dataset.input_size]).to(dev)
+            y_ind = b["y_ind"].to(dev)
+            y_hat = net(X)[y_ind[0], y_ind[1]]
+
+            y_hat_list.append(y_hat.cpu())
+            y_row_list.append(b["y_ind"][0] + row_count)
+            y_col_list.append(b["y_ind"][1])
+
+            row_count += b["batch_size"]
+
+        if len(y_hat_list) == 0:
+            return scipy.sparse.csr_matrix(loader.dataset.y.shape, dtype=np.float32)
+
+        y_hat = torch.sigmoid(torch.cat(y_hat_list, dim=0)).numpy()
+        y_row = torch.cat(y_row_list, dim=0).numpy()
+        y_col = torch.cat(y_col_list, dim=0).numpy()
+        shape = loader.dataset.y.shape
+        return scipy.sparse.csr_matrix((y_hat, (y_row, y_col)), shape=shape)
 
 def fold_inputs(x, folding_size, binarize=True):
     if x.shape[1] <= folding_size:

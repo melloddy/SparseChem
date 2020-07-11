@@ -40,10 +40,7 @@ args = parser.parse_args()
 
 print(args)
 
-
-
 conf = sc.load_results(args.conf)["conf"]
-
 ecfp = sc.load_sparse(args.x)
 if ecfp is None:
    parser.print_help()
@@ -90,8 +87,12 @@ if args.y is None:
     y = csr_matrix((ecfp.shape[0], conf.output_size), dtype=np.float32)
 else:
     y = sc.load_sparse(args.y)
+    assert y is not None, f"Unsupported filetype for --y: '{args.y}'."
+    assert ecfp.shape[0] == y.shape[0], f"The number of rows in X ({ecfp.shape[0]}) must be equal to the number of rows in Y ({y.shape[0]})."
+    assert y.shape[1] == conf.output_size, f"Y matrix has {y.shape[1]} columns and model has {conf.output_size}. They must be equal."
     if args.predict_fold is not None:
         folding = np.load(args.folding)
+        assert folding.shape[0] == ecfp.shape[0], f"Folding has {folding.shape[0]} rows and X has {ecfp.shape[0]}. Must be equal."
         keep    = np.isin(folding, args.predict_fold)
         y       = keep_rows(y, keep)
 

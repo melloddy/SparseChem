@@ -119,6 +119,24 @@ The predictions themselves are class probabilities (values between 0.0 and 1.0).
 
 There is an option `--dropout 1` to switch on the dropout during predictions to obtain stochastic predictions, *e.g.*, for MC-dropout. 
 
+## Sparse predictions
+It is also possible to predict only selected elements from the whole output matrix.
+To this end one should provide sparse matrix `--y y_to_predict.npy` (.npy or .mtx) and `predict.py` will only return predictions for the elements in that sparse matrix, e.g., 
+```bash
+python predict.py \
+    --x new_compounds.mtx \
+    --y y_to_predict.npy \
+    --outfile y_hat.npy \
+    --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05.json \
+    --model models/sc_chembl_h400.400_ldo0.2_wd1e-05.pt \
+    --dev cuda:0
+```
+The returned `y_hat.npy` is now `scipy.sparse` matrix with the same shape and the same sparsity pattern as `y_to_predict.npy`.
+The resulting file can be loaded by `np.load('y_hat.npy', allow_pickle=True).item()`.
+
+Additionally, if only a specific fold is of interest out of Y then we can add parameters `--folding my_folding.npy`, `--predict_fold 0` to only return predictions for rows who are in **fold 0** (where the folding is specified by `my_folding.npy`).
+It is possible to predict several folds by specifying them as `--predict_fold 0 2 3`.
+
 ## Retreiving last hidden layers
 Instead of outputting the predictions we can use `predict.py` to output the activations of the last layer.
 This can be done by adding the option `--last_hidden 1`.

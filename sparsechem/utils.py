@@ -125,7 +125,18 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 
-def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1, progress=True):
+def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss=None, num_int_batches=1, progress=True):
+    """
+    Args:
+        net         pytorch network
+        optimizer   optimizer to use
+        loader      data loader with training data
+        dev         device
+        task_weights     weights of the tasks
+        normalize_loss   normalization value, if None then use number of rows
+        num_int_batches  number of internal batches to use
+        progress         whether to show a progress bar
+    """
     net.train()
     logloss_sum   = 0.0
     logloss_count = 0
@@ -146,9 +157,13 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
         yhat_all = net(X)
         yhat     = yhat_all[y_ind[0], y_ind[1]]
         
-        output   = (loss(yhat, y_data) * y_w).sum()
-        output_n = output / (b["batch_size"] * num_int_batches)
+        if normalize_loss is None:
+            norm = b["batch_size"] * num_int_batches
+        else:
+            norm = normalize_loss
 
+        output   = (loss(yhat, y_data) * y_w).sum()
+        output_n = output / norm
         output_n.backward()
 
         int_count += 1

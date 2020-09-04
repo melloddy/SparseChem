@@ -108,7 +108,7 @@ class MiddleNet(torch.nn.Module):
         self.net = nn.Sequential()
         for i in range(len(conf.hidden_sizes) - 1):
             self.net.add_module(f"layer_{i}", nn.Sequential(
-                nn.ReLU(),
+                non_linearities[conf.middle_non_linearity](),
                 nn.Dropout(conf.middle_dropout),
                 nn.Linear(conf.hidden_sizes[i], conf.hidden_sizes[i+1], bias=True),
             ))

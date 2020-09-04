@@ -34,8 +34,8 @@ parser.add_argument("--middle_dropout", help="Dropout for layers before the last
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
 parser.add_argument("--weight_decay", help="Weight decay", type=float, default=0.0)
 parser.add_argument("--last_non_linearity", help="Last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
-parser.add_argument("--non_linearity", help="Before last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
-parser.add_argument("--input_transform", help="Transformation to apply to inputs", type=str, default="binarize", choices=["binarize", "none", "tanh"])
+parser.add_argument("--middle_non_linearity", "--non_linearity", help="Before last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
+parser.add_argument("--input_transform", help="Transformation to apply to inputs", type=str, default="none", choices=["binarize", "none", "tanh", "log1p"])
 parser.add_argument("--lr", help="Learning rate", type=float, default=1e-3)
 parser.add_argument("--lr_alpha", help="Learning rate decay multiplier", type=float, default=0.3)
 parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", type=int, default=[10])
@@ -100,10 +100,6 @@ assert ecfp.shape[0] == folding.shape[0], "x and folding must have same number o
 ## Loading task weights
 weights_class = sc.load_task_weights(args.weights_class, y=y_class, label="y_class")
 weights_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
-
-if args.fold_inputs is not None:
-    ecfp = sc.fold_inputs(ecfp, folding_size=args.fold_inputs)
-    vprint(f"Folding inputs to {ecfp.shape[1]} dimensions.")
 
 ## Input transformation
 ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=args.input_transform)

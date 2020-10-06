@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import scipy.sparse
 import scipy.io
+import scipy.special
 import types
 import json
 import warnings
@@ -23,28 +24,54 @@ class Nothing(object):
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+def calc_acc_kappa(recall, fpr, num_pos, num_neg):
+    """Calculates accuracy from recall and precision."""
+    num_all = num_neg + num_pos
+    tp = np.round(recall * num_pos).astype(np.int)
+    fn = num_pos - tp
+    fp = np.round(fpr * num_neg).astype(np.int)
+    tn = num_neg - fp
+    acc   = (tp + tn) / num_all
+    pexp  = num_pos / num_all * (tp + fp) / num_all + num_neg / num_all * (tn + fn) / num_all
+    kappa = (acc - pexp) / (1 - pexp)
+    return acc, kappa
+
 def all_metrics(y_true, y_score):
+    """Compute classification metrics.
+    Args:
+        y_true     true labels (0 / 1)
+        y_score    logit values
+    """
     if len(y_true) <= 1 or (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "max_f1_score": [np.nan], "kappa": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan]})
         return df
-    roc_auc_score = sklearn.metrics.roc_auc_score(
-          y_true  = y_true,
-          y_score = y_score)
-    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
+
+    fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
+    roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
+    precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
 
     ## calculating F1 for all cutoffs
     F1_score       = np.zeros(len(precision))
     mask           = precision > 0
     F1_score[mask] = 2 * (precision[mask] * recall[mask]) / (precision[mask] + recall[mask])
+    f1_max_idx     = F1_score.argmax()
+    f1_max         = F1_score[f1_max_idx]
+    p_f1_max       = scipy.special.expit(pr_thresholds[f1_max_idx])
 
-    max_f1_score = F1_score.max()
     auc_pr = sklearn.metrics.auc(x = recall, y = precision)
     avg_prec_score = sklearn.metrics.average_precision_score(
           y_true  = y_true,
           y_score = y_score)
-    y_classes = np.where(y_score > 0.5, 1, 0)
-    kappa     = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "max_f1_score": [max_f1_score], "kappa": [kappa]})
+    y_classes = np.where(y_score >= 0.0, 1, 0)
+
+    ## accuracy for all thresholds
+    acc, kappas   = calc_acc_kappa(recall=tpr, fpr=fpr, num_pos=(y_true==1).sum(), num_neg=(y_true==0).sum())
+    kappa_max_idx = kappas.argmax()
+    kappa_max     = kappas[kappa_max_idx]
+    p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
+
+    kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max})
     return df
 
 def compute_corr(x, y):
@@ -86,8 +113,11 @@ def compute_metrics(cols, y_true, y_score, num_tasks):
             "roc_auc_score": np.nan,
             "auc_pr": np.nan,
             "avg_prec_score": np.nan,
-            "max_f1_score": np.nan,
-            "kappa": np.nan}, index=np.arange(num_tasks))
+            "f1_max": np.nan,
+            "p_f1_max": np.nan,
+            "kappa": np.nan,
+            "kappa_max": np.nan,
+            "p_kappa_max": np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
     metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
@@ -128,7 +158,7 @@ def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
             f"{epoch}.\t{metrics_va['logloss']:.5f}"
             f" | {metrics_va['roc_auc_score']:.5f}"
             f" |  {metrics_va['auc_pr']:.5f}"
-            f" |  {metrics_va['max_f1_score']:.5f}"
+            f" |  {metrics_va['f1_max']:.5f}"
             f" | {train_time:6.1f}"
         )
         print(output_fstr)
@@ -141,7 +171,7 @@ def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
         f"{epoch}.\t{metrics_tr['logloss']:.5f}  {metrics_va['logloss']:.5f}"
         f" | {metrics_tr['roc_auc_score']:.5f}  {metrics_va['roc_auc_score']:.5f}"
         f" |  {metrics_tr['auc_pr']:.5f}   {metrics_va['auc_pr']:.5f}"
-        f" |  {metrics_tr['max_f1_score']:.5f}   {metrics_va['max_f1_score']:.5f}"
+        f" |  {metrics_tr['f1_max']:.5f}   {metrics_va['f1_max']:.5f}"
         f" | {train_time:6.1f}"
     )
     print(output_fstr)
@@ -157,11 +187,11 @@ columns_cr = [
     Column("logloss",       size=8, dec= 5, title="logl"),
     Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
     Column("auc_pr",        size=8, dec= 5, title="aucpr"),
-    Column("max_f1_score",  size=8, dec= 5, title="maxf1"),
+    Column("f1_max",        size=8, dec= 5, title="f1_max"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("rmse",          size=9, dec= 5, title="rmse"),
     Column("rsquared",      size=9, dec= 5, title="rsquared"),
-    Column("corrcoef",          size=9, dec= 5, title="corrcoef"),
+    Column("corrcoef",      size=9, dec= 5, title="corrcoef"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("train_time",    size=6, dec= 1, title="tr_time"),
 ]

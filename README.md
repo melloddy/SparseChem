@@ -170,6 +170,7 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 * __--y_censor__: Censor mask for regression (matrix market or numpy)
 * __--weights_class | --task_weights | --weights_classification__: CSV file with columns task_id, weight (for classification tasks) (str)
 * __--weights_regr | --weights_regression__: CSV file with columns task_id, weight (for regression tasks) (str)
+* __--censored_loss__: Set this to 0 if censored loss should not be used for training (type=int, default=1)
 * __--folding__: Folding file (npy) (str, folding_hier_0.6.npy)
 * __--fold_va__: Validation fold number (int, default=0)
 * __--fold_te__: Test fold number (removed from dataset) (int)

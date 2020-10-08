@@ -12,6 +12,7 @@ import sys
 import os.path
 import time
 import json
+import functools
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
@@ -24,6 +25,7 @@ parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix ma
 parser.add_argument("--y_censor", help="Censor mask for regression (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, weight (for classification tasks)", type=str, default=None)
 parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, weight (for regression tasks)", type=str, default=None)
+parser.add_argument("--censored_loss", help="Whether censored loss is used for training (default 1)", type=int, default=1)
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
@@ -167,6 +169,8 @@ dev  = torch.device(args.dev)
 net  = sc.SparseFFN(args).to(dev)
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")
 loss_regr  = sc.censored_mse_loss
+if not args.censored_loss:
+    loss_regr = functools.partial(loss_regr, censored_enabled=False)
 
 if weights_class is not None: weights_class = weights_class.to(dev)
 if weights_regr is not None: weights_regr = weights_regr.to(dev)

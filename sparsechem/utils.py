@@ -85,7 +85,7 @@ def compute_corr(x, y):
 
 def all_metrics_regr(y_true, y_score, y_censor=None):
     if len(y_true) <= 1:
-        df = pd.DataFrame({"rmse": [np.nan], "rsquared": [np.nan], "corrcoef": [np.nan]})
+        df = pd.DataFrame({"rmse": [np.nan], "rmse_uncen": [np.nan], "rsquared": [np.nan], "corrcoef": [np.nan]})
         return df
     ## censor0 means non-censored observations
     censor0 = y_censor == 0 if y_censor is not None else slice(None)
@@ -101,9 +101,10 @@ def all_metrics_regr(y_true, y_score, y_censor=None):
         rsquared = 1 - mse / yvar
         corr     = compute_corr(y_true[censor0], y_score[censor0])
     df = pd.DataFrame({
-        "rmse":     [np.sqrt(mse_cen)],
-        "rsquared": [rsquared],
-        "corrcoef": [corr],
+        "rmse":       [np.sqrt(mse_cen)],
+        "rmse_uncen": [np.sqrt(mse)],
+        "rsquared":   [rsquared],
+        "corrcoef":   [corr],
     })
     return df
 

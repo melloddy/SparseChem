@@ -520,29 +520,43 @@ def load_task_weights(filename, y, label):
         df      DataFrame with weights
         y       csr matrix of labels
         label   name for error messages
+    Returns tuple of
+        weight_training
+        weight_aggregation
+        task_type
     """
+    res = {"training_weight": None, "aggregation_weight": None, "task_type": None}
     if y is None:
         assert filename is None, f"Weights provided for {label}, please add also --{label}"
-        return None
+        res["training_weight"] = torch.ones(0)
+        return res
 
     if filename is None:
-        return torch.ones(y.shape[1])
+        res["training_weight"] = torch.ones(y.shape[1])
+        return res
 
     df = pd.read_csv(filename)
 
     assert "task_id" in df.columns, "task_id is missing in task info CVS file"
-    assert "weight" in df.columns, "weight is missing in task info CSV file"
+    df.rename(columns={"weight": "training_weight"})
+    assert "training_weight" in df.columns, "training_weight is missing in task info CSV file"
     df.sort_values("task_id", inplace=True)
 
     assert y.shape[1] == df.shape[0], f"task weights for '{label}' have different size ({df.shape[0]}) to {label} columns ({y.shape[1]})."
-    assert (0 <= df.weight).all(), "task weights (for {label}) must not be negative"
-    assert (df.weight <= 1).all(), "task weights (for {label}) must not be larger than 1.0"
+    assert (0 <= df.training_weight).all(), f"task weights (for {label}) must not be negative"
+    assert (df.training_weight <= 1).all(), f"task weights (for {label}) must not be larger than 1.0"
 
-    assert df.task_id.unique().shape[0] == df.shape[0], "task ids (for {label}) are not all unique"
-    assert (0 <= df.task_id).all(), "task ids in task weights (for {label}) must not be negative"
-    assert (df.task_id < df.shape[0]).all(), "task ids in task weights (for {label}) must be below number of tasks"
+    assert df.task_id.unique().shape[0] == df.shape[0], f"task ids (for {label}) are not all unique"
+    assert (0 <= df.task_id).all(), f"task ids in task weights (for {label}) must not be negative"
+    assert (df.task_id < df.shape[0]).all(), f"task ids in task weights (for {label}) must be below number of tasks"
 
-    return torch.FloatTensor(df.weight.values)
+    res["training_weight"] = torch.FloatTensor(df.training_weight.values)
+    if "weight_aggregation" in df:
+        res["weight_aggregation"] = df.weight_aggregation.values
+    if "task_type" in df:
+        res["task_type"] = df.task_type.values
+
+    return res
 
 def save_results(filename, conf, validation, training):
     """Saves conf and results into json file. Validation and training can be None."""

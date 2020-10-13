@@ -100,8 +100,8 @@ folding = np.load(args.folding)
 assert ecfp.shape[0] == folding.shape[0], "x and folding must have same number of rows"
 
 ## Loading task weights
-weights_class = sc.load_task_weights(args.weights_class, y=y_class, label="y_class")
-weights_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
+tasks_class = sc.load_task_weights(args.weights_class, y=y_class, label="y_class")
+tasks_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
 
 ## Input transformation
 ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=args.input_transform)
@@ -172,8 +172,8 @@ loss_regr  = sc.censored_mse_loss
 if not args.censored_loss:
     loss_regr = functools.partial(loss_regr, censored_enabled=False)
 
-if weights_class is not None: weights_class = weights_class.to(dev)
-if weights_regr is not None: weights_regr = weights_regr.to(dev)
+weights_class = tasks_class["training_weight"].to(dev)
+weights_regr  = tasks_regr["training_weight"].to(dev)
 
 vprint("Network:")
 vprint(net)

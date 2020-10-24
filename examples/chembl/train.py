@@ -44,7 +44,8 @@ parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", t
 parser.add_argument("--input_size_freq", help="Number of high importance features", type=int, default=None)
 parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no folding)", type=int, default=None)
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
-parser.add_argument("--min_samples_auc", help="Minimum number samples (in each class) for AUC calculation", type=int, default=25)
+parser.add_argument("--min_samples_class", help="Minimum number samples in each class and in each fold for AUC calculation (only used if aggregation_weight is not provided in --weights_class)", type=int, default=5)
+parser.add_argument("--min_samples_auc", help="Obsolete: use 'min_samples_class'", type=int, default=None)
 parser.add_argument("--min_samples_regr", help="Minimum number samples for regression metric calculation", type=int, default=100)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--run_name", help="Run name for results", type=str, default=None)
@@ -108,16 +109,29 @@ ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=a
 
 num_pos    = np.array((y_class == +1).sum(0)).flatten()
 num_neg    = np.array((y_class == -1).sum(0)).flatten()
+num_class  = np.array((y_class != 0).sum(0)).flatten()
+if (num_class != num_pos + num_neg).any():
+    raise ValueError("All --y_class values must be 1 or -1.")
+
 num_regr   = np.bincount(y_regr.indices, minlength=y_regr.shape[1])
-class_cols = np.where((num_pos >= args.min_samples_auc) & (num_neg >= args.min_samples_auc))[0]
-regr_cols  = np.where(num_regr >= args.min_samples_regr)[0]
+
+assert args.min_samples_auc is None, "Parameter 'min_samples_auc' is obsolete. Use '--min_samples_class' that specifies how many samples a task needs per FOLD and per CLASS to be aggregated."
+
+if tasks_class.aggregation_weight is None:
+    ## using min_samples rule
+    fold_pos, fold_neg = sc.class_fold_counts(y_class, folding)
+    n = args.min_samples_class
+    tasks_class.aggregation_weight = ((fold_pos >= n).all(0) & (fold_neg >= n)).all(0).astype(np.float64)
+
+if tasks_regr.aggregation_weight is None:
+    tasks_regr.aggregation_weight = (num_regr >= args.min_samples_regr).astype(np.float64)
 
 vprint(f"Input dimension: {ecfp.shape[1]}")
 vprint(f"#samples:        {ecfp.shape[0]}")
 vprint(f"#classification tasks:  {y_class.shape[1]}")
 vprint(f"#regression tasks:      {y_regr.shape[1]}")
-vprint(f"There are {len(class_cols)} classification tasks for calculating mean AUC (i.e., have at least {args.min_samples_auc} positives and {args.min_samples_auc} negatives).")
-vprint(f"There are {len(regr_cols)} regression tasks for calculating metrics (i.e., having at least {args.min_samples_regr} data points).")
+vprint(f"Using {(tasks_class.aggregation_weight > 0).sum()} classification tasks for calculating aggregated metrics (AUCROC, F1_max, etc).")
+vprint(f"Using {(tasks_regr.aggregation_weight > 0).sum()} regression tasks for calculating metrics (RMSE, Rsquared, correlation).")
 
 if args.fold_te is not None:
     ## removing test data
@@ -172,8 +186,8 @@ loss_regr  = sc.censored_mse_loss
 if not args.censored_loss:
     loss_regr = functools.partial(loss_regr, censored_enabled=False)
 
-weights_class = tasks_class["training_weight"].to(dev)
-weights_regr  = tasks_regr["training_weight"].to(dev)
+tasks_class.training_weight = tasks_class.training_weight.to(dev)
+tasks_regr.training_weight  = tasks_regr.training_weight.to(dev)
 
 vprint("Network:")
 vprint(net)
@@ -191,8 +205,8 @@ for epoch in range(args.epochs):
         loss_class      = loss_class,
         loss_regr       = loss_regr,
         dev             = dev,
-        weights_class   = weights_class,
-        weights_regr    = weights_regr,
+        weights_class   = tasks_class.training_weight,
+        weights_regr    = tasks_regr.training_weight,
         num_int_batches = num_int_batches,
         progress        = args.verbose >= 2)
 
@@ -202,14 +216,14 @@ for epoch in range(args.epochs):
     last_round = epoch == args.epochs - 1
 
     if eval_round or last_round:
-        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, weights_class=weights_class, weights_regr=weights_regr, class_cols=class_cols, regr_cols=regr_cols, dev=dev, progress = args.verbose >= 2)
+        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)
         for key, val in results_va["classification_agg"].items():
             writer.add_scalar(key+"/tr", val, epoch)
         for key, val in results_va["regression_agg"].items():
             writer.add_scalar(key+"/tr", val, epoch)
 
         if args.eval_train:
-            results_tr = sc.evaluate_class_regr(net, loader_tr, loss_class, loss_regr, weights_class=weights_class, weights_regr=weights_regr, class_cols=class_cols, regr_cols=regr_cols, dev=dev, progress = args.verbose >= 2)
+            results_tr = sc.evaluate_class_regr(net, loader_tr, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)
             for key, val in results_tr["classification_agg"].items():
                 writer.add_scalar(key+"/tr", val, epoch)
             for key, val in results_tr["regression_agg"].items():

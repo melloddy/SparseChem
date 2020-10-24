@@ -150,6 +150,16 @@ def compute_metrics_regr(cols, y_true, y_score, num_tasks, y_censor=None):
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
+def class_fold_counts(y_class, folding):
+    folds = np.unique(folding)
+    num_pos = []
+    num_neg = []
+    for fold in folds:
+        yf = y_class[folding == fold]
+        num_pos.append( np.array((yf == +1).sum(0)).flatten() )
+        num_neg.append( np.array((yf == -1).sum(0)).flatten() )
+    return np.row_stack(num_pos), np.row_stack(num_neg)
+
 
 def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     if metrics_tr is None:
@@ -365,7 +375,17 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev, weights
         ## process tail batch (should not happen)
         optimizer.step()
 
-def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weights_regr, dev, class_cols, regr_cols, progress=True):
+
+def aggregate_results(df, weights):
+    """Compute aggregates based on the weights"""
+    wnorm = weights / weights.sum()
+    return (df * wnorm[:,None]).reindex(labels=np.where(weights > 0)[0]).sum(0, skipna=False)
+
+
+def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True):
+    class_w = tasks_class.aggregation_weight
+    regr_w  = tasks_regr.aggregation_weight
+
     net.eval()
     loss_class_sum   = 0.0
     loss_regr_sum    = 0.0
@@ -383,7 +403,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weigh
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
-            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, dev=dev)
+            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev)
             loss_class_sum += fwd["yc_loss"]
             loss_regr_sum  += fwd["yr_loss"]
 
@@ -394,20 +414,21 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weigh
 
         out = {}
         if len(data["yc_ind"]) == 0:
+            ## there are no data for classification
             out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks)
-            out["classification_agg"] = out["classification"].reindex(labels=class_cols).mean(0)
+            out["classification_agg"] = out["classification"].reindex(labels=[]).mean(0)
             out["classification_agg"]["logloss"] = np.nan
         else:
             yc_ind  = torch.cat(data["yc_ind"], dim=1).numpy()
             yc_data = torch.cat(data["yc_data"], dim=0).numpy()
             yc_hat  = torch.cat(data["yc_hat"], dim=0).numpy()
             out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks)
-            out["classification_agg"] = out["classification"].reindex(labels=class_cols).mean(0)
+            out["classification_agg"] = aggregate_results(out["classification"], weights=class_w)
             out["classification_agg"]["logloss"] = loss_class_sum.cpu().item() / yc_hat.shape[0]
 
         if len(data["yr_ind"]) == 0:
             out["regression"] = compute_metrics_regr([], y_true=[], y_score=[], num_tasks=num_regr_tasks)
-            out["regression_agg"] = out["regression"].reindex(labels=regr_cols).mean(0)
+            out["regression_agg"] = out["regression"].reindex(labels=[]).mean(0)
             out["regression_agg"]["mseloss"] = np.nan
         else:
             yr_ind  = torch.cat(data["yr_ind"], dim=1).numpy()
@@ -418,13 +439,13 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, weights_class, weigh
             else:
                 ycen_data = None
             out["regression"] = compute_metrics_regr(yr_ind[1], y_true=yr_data, y_score=yr_hat, y_censor=ycen_data, num_tasks=num_regr_tasks)
-            out["regression_agg"] = out["regression"].reindex(labels=regr_cols).mean(0)
+            out["regression_agg"] = aggregate_results(out["regression"], weights=regr_w)
             out["regression_agg"]["mseloss"] = loss_regr_sum.cpu().item() / yr_hat.shape[0]
 
         out["classification_agg"]["num_tasks_total"] = loader.dataset.class_output_size
-        out["classification_agg"]["num_tasks_agg"]   = len(class_cols)
+        out["classification_agg"]["num_tasks_agg"]   = (tasks_class.aggregation_weight > 0).sum()
         out["regression_agg"]["num_tasks_total"] = loader.dataset.regr_output_size
-        out["regression_agg"]["num_tasks_agg"]   = len(regr_cols)
+        out["regression_agg"]["num_tasks_agg"]   = (tasks_regr.aggregation_weight > 0).sum()
 
         return out
 
@@ -521,18 +542,18 @@ def load_task_weights(filename, y, label):
         y       csr matrix of labels
         label   name for error messages
     Returns tuple of
-        weight_training
-        weight_aggregation
+        training_weight
+        aggregation_weight
         task_type
     """
-    res = {"training_weight": None, "aggregation_weight": None, "task_type": None}
+    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None)
     if y is None:
         assert filename is None, f"Weights provided for {label}, please add also --{label}"
-        res["training_weight"] = torch.ones(0)
+        res.training_weight = torch.ones(0)
         return res
 
     if filename is None:
-        res["training_weight"] = torch.ones(y.shape[1])
+        res.training_weight = torch.ones(y.shape[1])
         return res
 
     df = pd.read_csv(filename)
@@ -550,11 +571,12 @@ def load_task_weights(filename, y, label):
     assert (0 <= df.task_id).all(), f"task ids in task weights (for {label}) must not be negative"
     assert (df.task_id < df.shape[0]).all(), f"task ids in task weights (for {label}) must be below number of tasks"
 
-    res["training_weight"] = torch.FloatTensor(df.training_weight.values)
-    if "weight_aggregation" in df:
-        res["weight_aggregation"] = df.weight_aggregation.values
+    res.training_weight = torch.FloatTensor(df.training_weight.values)
+    if "aggregation_weight" in df:
+        assert (0 <= df.aggregation_weight)
+        res.aggregation_weight = df.aggregation_weight.values
     if "task_type" in df:
-        res["task_type"] = df.task_type.values
+        res.task_type = df.task_type.values
 
     return res
 

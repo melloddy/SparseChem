@@ -111,7 +111,7 @@ num_pos    = np.array((y_class == +1).sum(0)).flatten()
 num_neg    = np.array((y_class == -1).sum(0)).flatten()
 num_class  = np.array((y_class != 0).sum(0)).flatten()
 if (num_class != num_pos + num_neg).any():
-    raise ValueError("All --y_class values must be 1 or -1.")
+    raise ValueError("For classification all y values (--y_class/--y) must be 1 or -1.")
 
 num_regr   = np.bincount(y_regr.indices, minlength=y_regr.shape[1])
 

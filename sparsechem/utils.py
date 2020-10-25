@@ -378,7 +378,10 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev, weights
 
 def aggregate_results(df, weights):
     """Compute aggregates based on the weights"""
-    wnorm = weights / weights.sum()
+    wsum = weights.sum()
+    if wsum == 0:
+        return pd.Series(np.nan, index=df.columns)
+    wnorm = weights / wsum
     return (df * wnorm[:,None]).reindex(labels=np.where(weights > 0)[0]).sum(0, skipna=False)
 
 

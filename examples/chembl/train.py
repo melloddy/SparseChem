@@ -23,8 +23,8 @@ parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type
 parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--y_censor", help="Censor mask for regression (matrix market or numpy)", type=str, default=None)
-parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, weight (for classification tasks)", type=str, default=None)
-parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, weight (for regression tasks)", type=str, default=None)
+parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, training_weight, aggregation_weight (for classification tasks)", type=str, default=None)
+parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, training_weight, aggregation_weight (for regression tasks)", type=str, default=None)
 parser.add_argument("--censored_loss", help="Whether censored loss is used for training (default 1)", type=int, default=1)
 parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
@@ -133,7 +133,7 @@ vprint(f"#regression tasks:      {y_regr.shape[1]}")
 vprint(f"Using {(tasks_class.aggregation_weight > 0).sum()} classification tasks for calculating aggregated metrics (AUCROC, F1_max, etc).")
 vprint(f"Using {(tasks_regr.aggregation_weight > 0).sum()} regression tasks for calculating metrics (RMSE, Rsquared, correlation).")
 
-if args.fold_te is not None:
+if args.fold_te is not None and args.fold_te >= 0:
     ## removing test data
     assert args.fold_te != args.fold_va, "fold_va and fold_te must not be equal."
     keep    = folding != args.fold_te
@@ -218,9 +218,9 @@ for epoch in range(args.epochs):
     if eval_round or last_round:
         results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)
         for key, val in results_va["classification_agg"].items():
-            writer.add_scalar(key+"/tr", val, epoch)
+            writer.add_scalar(key+"/va", val, epoch)
         for key, val in results_va["regression_agg"].items():
-            writer.add_scalar(key+"/tr", val, epoch)
+            writer.add_scalar(key+"/va", val, epoch)
 
         if args.eval_train:
             results_tr = sc.evaluate_class_regr(net, loader_tr, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)

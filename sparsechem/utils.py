@@ -271,7 +271,18 @@ def evaluate_binary(net, loader, loss, dev, progress=True):
             'logloss': logloss_sum.cpu().numpy() / logloss_count
         }
 
-def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batches=1, progress=True):
+def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss=None, num_int_batches=1, progress=True):
+    """
+    Args:
+        net         pytorch network
+        optimizer   optimizer to use
+        loader      data loader with training data
+        dev         device
+        task_weights     weights of the tasks
+        normalize_loss   normalization value, if None then use batch size 
+        num_int_batches  number of internal batches to use
+        progress         whether to show a progress bar
+    """
     net.train()
     logloss_sum   = 0.0
     logloss_count = 0
@@ -291,10 +302,13 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, num_int_batche
 
         yhat_all = net(X)
         yhat     = yhat_all[y_ind[0], y_ind[1]]
+
+        norm = normalize_loss
+        if norm is None:
+            norm = b["batch_size"] * num_int_batches
         
         output   = (loss(yhat, y_data) * y_w).sum()
-        output_n = output / (b["batch_size"] * num_int_batches)
-
+        output_n = output / norm
         output_n.backward()
 
         int_count += 1
@@ -353,7 +367,9 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     return out
 
 
-def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev, weights_class, weights_regr, num_int_batches=1, progress=True):
+def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
+                     weights_class, weights_regr,
+                     normalize_loss=None, num_int_batches=1, progress=True):
     net.train()
 
     int_count = 0
@@ -361,9 +377,13 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev, weights
         if int_count == 0:
             optimizer.zero_grad()
 
+        norm = normalize_loss
+        if norm is None:
+            norm = b["batch_size"] * num_int_batches
+
         fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, dev=dev)
         loss = fwd["yc_loss"] + fwd["yr_loss"]
-        loss_norm = loss / (b["batch_size"] * num_int_batches)
+        loss_norm = loss / norm
         loss_norm.backward()
 
         int_count += 1

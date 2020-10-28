@@ -31,6 +31,7 @@ parser.add_argument("--fold_va", help="Validation fold number", type=int, defaul
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
+parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
@@ -207,6 +208,7 @@ for epoch in range(args.epochs):
         dev             = dev,
         weights_class   = tasks_class.training_weight,
         weights_regr    = tasks_regr.training_weight,
+        normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
         progress        = args.verbose >= 2)
 

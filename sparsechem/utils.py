@@ -596,7 +596,7 @@ def load_task_weights(filename, y, label):
 
     res.training_weight = torch.FloatTensor(df.training_weight.values)
     if "aggregation_weight" in df:
-        assert (0 <= df.aggregation_weight)
+        assert (0 <= df.aggregation_weight).all(), f"Found negative aggregation_weight for {label}. Aggregation weights must be non-negative."
         res.aggregation_weight = df.aggregation_weight.values
     if "task_type" in df:
         res.task_type = df.task_type.values

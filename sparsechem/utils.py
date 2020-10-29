@@ -338,6 +338,8 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     out["yr_hat_all"] = yr_hat_all
     out["yc_loss"]    = 0
     out["yr_loss"]    = 0
+    out["yc_weights"] = 0
+    out["yr_weights"] = 0
 
     if out["yc_hat_all"] is not None:
         yc_ind  = b["yc_ind"].to(dev, non_blocking=True)
@@ -348,6 +350,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yc_data"] = yc_data
         out["yc_hat"]  = yc_hat
         out["yc_loss"] = (loss_class(yc_hat, yc_data) * yc_w).sum()
+        out["yc_weights"] = yc_w.sum()
 
     if out["yr_hat_all"] is not None:
         yr_ind  = b["yr_ind"].to(dev, non_blocking=True)
@@ -363,6 +366,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yr_data"] = yr_data
         out["yr_hat"]  = yr_hat
         out["yr_loss"] = (loss_regr(input=yr_hat, target=yr_data, censor=out["ycen_data"]) * yr_w).sum()
+        out["yr_weights"] = yr_w.sum()
 
     return out
 
@@ -412,6 +416,8 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
     net.eval()
     loss_class_sum   = 0.0
     loss_regr_sum    = 0.0
+    loss_class_weights = 0.0
+    loss_regr_weights  = 0.0
     data = {
         "yc_ind":  [],
         "yc_data": [],
@@ -429,6 +435,8 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
             fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev)
             loss_class_sum += fwd["yc_loss"]
             loss_regr_sum  += fwd["yr_loss"]
+            loss_class_weights += fwd["yc_weights"]
+            loss_regr_weights  += fwd["yr_weights"]
 
             ## storing data for AUCs
             for key in data.keys():
@@ -447,7 +455,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
             yc_hat  = torch.cat(data["yc_hat"], dim=0).numpy()
             out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks)
             out["classification_agg"] = aggregate_results(out["classification"], weights=class_w)
-            out["classification_agg"]["logloss"] = loss_class_sum.cpu().item() / yc_hat.shape[0]
+            out["classification_agg"]["logloss"] = loss_class_sum.cpu().item() / loss_class_weights.cpu().item()
 
         if len(data["yr_ind"]) == 0:
             out["regression"] = compute_metrics_regr([], y_true=[], y_score=[], num_tasks=num_regr_tasks)
@@ -463,7 +471,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
                 ycen_data = None
             out["regression"] = compute_metrics_regr(yr_ind[1], y_true=yr_data, y_score=yr_hat, y_censor=ycen_data, num_tasks=num_regr_tasks)
             out["regression_agg"] = aggregate_results(out["regression"], weights=regr_w)
-            out["regression_agg"]["mseloss"] = loss_regr_sum.cpu().item() / yr_hat.shape[0]
+            out["regression_agg"]["mseloss"] = loss_regr_sum.cpu().item() / loss_regr_weights.cpu().item()
 
         out["classification_agg"]["num_tasks_total"] = loader.dataset.class_output_size
         out["classification_agg"]["num_tasks_agg"]   = (tasks_class.aggregation_weight > 0).sum()

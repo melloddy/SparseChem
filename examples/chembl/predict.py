@@ -5,7 +5,6 @@ import scipy.sparse
 import numpy as np
 import pandas as pd
 import torch
-import tqdm
 import sys
 import argparse
 from torch.utils.data import DataLoader

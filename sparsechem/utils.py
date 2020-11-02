@@ -1,6 +1,6 @@
 # Copyright (c) 2020 KU Leuven
 import sklearn.metrics
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import torch

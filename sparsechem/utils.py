@@ -10,6 +10,7 @@ import scipy.special
 import types
 import json
 import warnings
+import torch.nn.functional as F
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 
@@ -43,12 +44,17 @@ def all_metrics(y_true, y_score):
         y_score    logit values
     """
     if len(y_true) <= 1 or (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan]})
         return df
 
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
     roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
     precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
+
+    bceloss = F.binary_cross_entropy_with_logits(
+        input  = torch.FloatTensor(y_score),
+        target = torch.FloatTensor(y_true),
+        reduction="none").mean().item()
 
     ## calculating F1 for all cutoffs
     F1_score       = np.zeros(len(precision))
@@ -71,7 +77,7 @@ def all_metrics(y_true, y_score):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss})
     return df
 
 def compute_corr(x, y):
@@ -196,6 +202,7 @@ columns_cr = [
     Column("epoch",         size=6, dec= 0, title="Epoch"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("logloss",       size=8, dec= 5, title="logl"),
+    Column("bceloss",       size=8, dec= 5, title="bceloss"),
     Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
     Column("auc_pr",        size=8, dec= 5, title="aucpr"),
     Column("f1_max",        size=8, dec= 5, title="f1_max"),

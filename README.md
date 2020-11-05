@@ -84,12 +84,15 @@ This is useful for reducing the model size, without hurting the performance too 
 
 ## Task weighting
 SparseChem also supports task weighting.
-This can be enabled by adding a `--weights_class weights.csv` option,
-where the file `weights.csv` should have two columns:
+This can be enabled by adding a `--weights_class weights_c.csv` option for classification and with `--weights_regr weights_r.csv` for regression.
+The CSV file can contain the following columns:
 * `task_id` integer from 0 to number of classification tasks minus 1,
-* `weight` real value between 0.0 and 1.0 (inclusive).
+* `training_weight` real value between 0.0 and 1.0 (inclusive) for each task,
+* `censored_weight` (optional) real value between 0.0 and 1.0 (inclusive). It allows per task down-weighting of censored values in **regression**.
+* `aggregation_weight` (optional) real value between 0.0 and 1.0 (inclusive). If specified determines weight when **aggregating metrics** (AUC-PR etc).
+* `task_type` (optional) string specifying task type.
 
-The number of weights in the CSV file must be equal to the number of tasks in `y` matrix.
+The number of tasks in the CSV file `--weights_class` (`--weights_regr`) must be equal to the number of tasks in `--y_class` matrix (`--y_regr`).
 
 ## Regression
 SparseChem also supports regression and also both regression and classification jointly.
@@ -116,7 +119,7 @@ For which SparseChem minimizes the mean squared error (MSE) loss.
 Note we have also switched the non-linearity to `tanh`.
 
 ## Censored regression
-It is possible to use censored regression by passing an extra sparse matrix with `--y_censor chembl_censor.mtx` that has the same sparsity pattern as `y_regr`.
+It is possible to use censored regression by passing an extra sparse matrix with `--y_censor chembl_censor.npy` that has the same sparsity pattern as `--y_regr`.
 The censor matrix should store the censoring mask for each regression value:
 * `-1` for below censoring
 * `0` for no censoring (usual regression)

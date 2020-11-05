@@ -124,7 +124,8 @@ def compute_metrics(cols, y_true, y_score, num_tasks):
             "p_f1_max": np.nan,
             "kappa": np.nan,
             "kappa_max": np.nan,
-            "p_kappa_max": np.nan}, index=np.arange(num_tasks))
+            "p_kappa_max": np.nan,
+            "bceloss": np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
     metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
@@ -138,6 +139,7 @@ def compute_metrics_regr(cols, y_true, y_score, num_tasks, y_censor=None):
     if len(cols) < 1:
         return pd.DataFrame({
             "rmse": np.nan,
+            "rmse_uncen": np.nan,
             "rsquared": np.nan,
             "corrcoef": np.nan,
             },
@@ -331,7 +333,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, dev):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu"):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
@@ -368,6 +370,11 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["ycen_data"] = b["ycen_data"]
         if out["ycen_data"] is not None:
             out["ycen_data"] = out["ycen_data"].to(dev, non_blocking=True)
+            
+            if len(censored_weight) > 0:
+                ## updating weights of censored data
+                yrcen_w = yr_w * censored_weight[yr_ind[1]]
+                yr_w    = torch.where(out["ycen_data"] == 0, yr_w, yrcen_w)
 
         out["yr_ind"]  = yr_ind
         out["yr_data"] = yr_data
@@ -379,7 +386,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
-                     weights_class, weights_regr,
+                     weights_class, weights_regr, censored_weight,
                      normalize_loss=None, num_int_batches=1, progress=True):
     net.train()
 
@@ -392,7 +399,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         if norm is None:
             norm = b["batch_size"] * num_int_batches
 
-        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, dev=dev)
+        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
         loss = fwd["yc_loss"] + fwd["yr_loss"]
         loss_norm = loss / norm
         loss_norm.backward()
@@ -477,6 +484,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
             else:
                 ycen_data = None
             out["regression"] = compute_metrics_regr(yr_ind[1], y_true=yr_data, y_score=yr_hat, y_censor=ycen_data, num_tasks=num_regr_tasks)
+            out["regression"]["aggregation_weight"] = regr_w
             out["regression_agg"] = aggregate_results(out["regression"], weights=regr_w)
             out["regression_agg"]["mseloss"] = loss_regr_sum.cpu().item() / loss_regr_weights.cpu().item()
 
@@ -584,7 +592,7 @@ def load_task_weights(filename, y, label):
         aggregation_weight
         task_type
     """
-    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None)
+    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor())
     if y is None:
         assert filename is None, f"Weights provided for {label}, please add also --{label}"
         res.training_weight = torch.ones(0)
@@ -615,6 +623,9 @@ def load_task_weights(filename, y, label):
         res.aggregation_weight = df.aggregation_weight.values
     if "task_type" in df:
         res.task_type = df.task_type.values
+    if "censored_weight" in df:
+        assert (0 <= df.censored_weight).all(), f"Found negative censored_weight for {label}. Censored weights must be non-negative."
+        res.censored_weight = torch.FloatTensor(df.censored_weight.values)
 
     return res
 

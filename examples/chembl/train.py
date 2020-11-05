@@ -46,7 +46,7 @@ parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
 parser.add_argument("--min_samples_class", help="Minimum number samples in each class and in each fold for AUC calculation (only used if aggregation_weight is not provided in --weights_class)", type=int, default=5)
 parser.add_argument("--min_samples_auc", help="Obsolete: use 'min_samples_class'", type=int, default=None)
-parser.add_argument("--min_samples_regr", help="Minimum number samples for regression metric calculation", type=int, default=100)
+parser.add_argument("--min_samples_regr", help="Minimum number samples in each fold for regression metric calculation", type=int, default=20)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--run_name", help="Run name for results", type=str, default=None)
 parser.add_argument("--output_dir", help="Output directory, including boards (default 'models')", type=str, default="models")
@@ -124,7 +124,11 @@ if tasks_class.aggregation_weight is None:
     tasks_class.aggregation_weight = ((fold_pos >= n).all(0) & (fold_neg >= n)).all(0).astype(np.float64)
 
 if tasks_regr.aggregation_weight is None:
-    tasks_regr.aggregation_weight = (num_regr >= args.min_samples_regr).astype(np.float64)
+    y_regr2 = y_regr.copy()
+    y_regr2.data[:] = 1
+    fold_regr, _    = sc.class_fold_counts(y_regr2, folding)
+    del y_regr2
+    tasks_regr.aggregation_weight = (fold_regr >= args.min_samples_regr).all(0).astype(np.float64)
 
 vprint(f"Input dimension: {ecfp.shape[1]}")
 vprint(f"#samples:        {ecfp.shape[0]}")
@@ -188,6 +192,7 @@ if not args.censored_loss:
 
 tasks_class.training_weight = tasks_class.training_weight.to(dev)
 tasks_regr.training_weight  = tasks_regr.training_weight.to(dev)
+tasks_regr.censored_weight  = tasks_regr.censored_weight.to(dev)
 
 vprint("Network:")
 vprint(net)
@@ -207,6 +212,7 @@ for epoch in range(args.epochs):
         dev             = dev,
         weights_class   = tasks_class.training_weight,
         weights_regr    = tasks_regr.training_weight,
+        censored_weight = tasks_regr.censored_weight,
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
         progress        = args.verbose >= 2)

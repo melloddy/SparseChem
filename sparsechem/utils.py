@@ -603,11 +603,17 @@ def load_task_weights(filename, y, label):
         return res
 
     df = pd.read_csv(filename)
+    df.rename(columns={"weight": "training_weight"}, inplace=True)
+    ## also supporting plural form column names:
+    df.rename(columns={c + "s": c for c in ["task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight"]}, inplace=True)
 
     assert "task_id" in df.columns, "task_id is missing in task info CVS file"
-    df.rename(columns={"weight": "training_weight"})
     assert "training_weight" in df.columns, "training_weight is missing in task info CSV file"
     df.sort_values("task_id", inplace=True)
+
+    for col in df.columns:
+        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight"]
+        assert col in cols, f"Unsupported colum '{col}' in task weight file. Supported columns: {cols}."
 
     assert y.shape[1] == df.shape[0], f"task weights for '{label}' have different size ({df.shape[0]}) to {label} columns ({y.shape[1]})."
     assert (0 <= df.training_weight).all(), f"task weights (for {label}) must not be negative"

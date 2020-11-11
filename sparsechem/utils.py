@@ -543,15 +543,16 @@ def fold_transform_inputs(x, folding_size=None, transform="none"):
         idx = x.nonzero()
         folded = idx[1] % folding_size
         x = scipy.sparse.csr_matrix((x.data, (idx[0], folded)), shape=(x.shape[0], folding_size))
+        x.sum_duplicates()
 
     if transform is None or transform == "none":
         pass
     elif transform == "binarize":
         x.data = (x.data > 0).astype(np.float32)
     elif transform == "tanh":
-        x.data = np.tanh(x.data)
+        x.data = np.tanh(x.data).astype(np.float32)
     elif transform == "log1p":
-        x.data = np.log1p(x.data)
+        x.data = np.log1p(x.data).astype(np.float32)
     else:
         raise ValueError(f"Unknown input transformation '{transform}'.")
     return x

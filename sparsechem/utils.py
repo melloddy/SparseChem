@@ -419,9 +419,8 @@ def aggregate_results(df, weights):
     wsum = weights.sum()
     if wsum == 0:
         return pd.Series(np.nan, index=df.columns)
-    wnorm = weights / wsum
-    return (df * wnorm[:,None]).reindex(labels=np.where(weights > 0)[0]).sum(0, skipna=False)
-
+    df2 = df.where(pd.isnull, 1) * weights[:,None]
+    return (df2.multiply(1.0 / df2.sum(axis=0), axis=1) * df).sum(axis=0)
 
 def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True):
     class_w = tasks_class.aggregation_weight

@@ -1,6 +1,7 @@
 import sparsechem as sc
 import torch
 import numpy as np
+import pandas as pd
 
 def test_mse_censored_loss():
     tar = np.array([2.5, 2.0, 1.0, 0.5, -0.5, -1.0], dtype=np.float32)
@@ -77,3 +78,14 @@ def test_mae_censored_loss():
     ])
     assert np.allclose(losses.numpy(), exp.numpy())
 
+def test_aggregate_results():
+    df = pd.DataFrame(np.array([
+        [1.0, 2.0, np.nan],
+        [5.0, np.nan, 1.0],
+        [7.0, 3.0, np.nan],
+        [6.5, 8.0, np.nan],
+    ]))
+    weights = np.array([0.1, 1.0, 0.6, 0.2])
+    agg = sc.aggregate_results(df, weights)
+    exp = np.array([5.578947368421, 4.0, 1.0])
+    assert np.allclose(agg, exp)

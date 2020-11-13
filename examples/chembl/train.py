@@ -25,7 +25,7 @@ parser.add_argument("--y_censor", help="Censor mask for regression (matrix marke
 parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, training_weight, aggregation_weight (for classification tasks)", type=str, default=None)
 parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, training_weight, aggregation_weight (for regression tasks)", type=str, default=None)
 parser.add_argument("--censored_loss", help="Whether censored loss is used for training (default 1)", type=int, default=1)
-parser.add_argument("--folding", help="Folding file (npy)", type=str, default="folding_hier_0.6.npy")
+parser.add_argument("--folding", help="Folding file (npy)", type=str, required=True)
 parser.add_argument("--fold_va", help="Validation fold number", type=int, default=0)
 parser.add_argument("--fold_te", help="Test fold number (removed from dataset)", type=int, default=None)
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
@@ -46,7 +46,7 @@ parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
 parser.add_argument("--min_samples_class", help="Minimum number samples in each class and in each fold for AUC calculation (only used if aggregation_weight is not provided in --weights_class)", type=int, default=5)
 parser.add_argument("--min_samples_auc", help="Obsolete: use 'min_samples_class'", type=int, default=None)
-parser.add_argument("--min_samples_regr", help="Minimum number samples in each fold for regression metric calculation", type=int, default=20)
+parser.add_argument("--min_samples_regr", help="Minimum number of uncensored samples in each fold for regression metric calculation (only used if aggregation_weight is not provided in --weights_regr)", type=int, default=10)
 parser.add_argument("--dev", help="Device to use", type=str, default="cuda:0")
 parser.add_argument("--run_name", help="Run name for results", type=str, default=None)
 parser.add_argument("--output_dir", help="Output directory, including boards (default 'models')", type=str, default="models")
@@ -124,9 +124,14 @@ if tasks_class.aggregation_weight is None:
     tasks_class.aggregation_weight = ((fold_pos >= n).all(0) & (fold_neg >= n)).all(0).astype(np.float64)
 
 if tasks_regr.aggregation_weight is None:
-    y_regr2 = y_regr.copy()
-    y_regr2.data[:] = 1
-    fold_regr, _    = sc.class_fold_counts(y_regr2, folding)
+    if y_censor.nnz == 0:
+        y_regr2 = y_regr.copy()
+        y_regr2.data[:] = 1
+    else:
+        ## only counting uncensored data
+        y_regr2      = y_censor.copy()
+        y_regr2.data = (y_regr2.data == 0).astype(np.int32)
+    fold_regr, _ = sc.class_fold_counts(y_regr2, folding)
     del y_regr2
     tasks_regr.aggregation_weight = (fold_regr >= args.min_samples_regr).all(0).astype(np.float64)
 

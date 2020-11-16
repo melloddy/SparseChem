@@ -9,6 +9,14 @@ import scipy.io
 import types
 import json
 
+class Nothing(object):
+    def __getattr__(self, name):
+        return Nothing()
+    def __call__(self, *args, **kwargs):
+        return Nothing()
+    def __repr__(self):
+        return "Nothing"
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 

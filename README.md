@@ -157,12 +157,40 @@ The predictions themselves are class probabilities (values between 0.0 and 1.0).
 
 There is an option `--dropout 1` to switch on the dropout during predictions to obtain stochastic predictions, *e.g.*, for MC-dropout. 
 
+## Sparse predictions
+It is also possible to predict only **selected elements** instead of the whole output matrix (either classification and/or regression):
+* add `--y_class y_class_to_predict.npy` (.npy or .mtx) for classification,
+* add `--y_regr y_regr_to_predict.npy` (.npy or .mtx) for regression.
+If added, these matrices specify locations where to make predictions to.
+
+Here is an example for classification:
+```bash
+python predict.py \
+    --x new_compounds.mtx \
+    --y_class y_to_predict.npy \
+    --outprefix y_hat \
+    --conf models/sc_chembl_h400.400_ldo0.2_wd1e-05.json \
+    --model models/sc_chembl_h400.400_ldo0.2_wd1e-05.pt \
+    --dev cuda:0
+```
+Then `predict.py` will save `y_hat-class.npy` which contains now `scipy.sparse` matrix with the same shape and the same sparsity pattern as `y_to_predict.npy`.
+The resulting file can be loaded by `yhat = np.load('y_hat-class.npy', allow_pickle=True).item()` or just by:
+```python
+import sparsechem as sc
+yhat = sc.load_sparse('y_hat-class.npy')
+```
+
+### Sparse predictions for specific folds
+
+Additionally, if only a specific fold is of interest out of Y then we can add parameters `--folding my_folding.npy` and `--predict_fold 0` to only return predictions for rows who are in **fold 0** (where the folding of samples is specified by `my_folding.npy`).
+It is possible to predict several folds by specifying them as `--predict_fold 0 2 3`.
+Note that the rows from the other (unspecified) folds will be just empty in the `y-hat-class.npy` matrix.
+
 ## Retreiving last hidden layers
 Instead of outputting the predictions we can use `predict.py` to output the activations of the last layer.
 This can be done by adding the option `--last_hidden 1`.
 
 Then the output file will contain the numpy matrix of the hidden vectors, which can be loaded the same way as predictions.
-
 
 
 ## Full list of all command line arguments

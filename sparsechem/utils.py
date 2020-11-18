@@ -13,6 +13,7 @@ import warnings
 import torch.nn.functional as F
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
+from scipy.sparse import csr_matrix
 
 class Nothing(object):
     def __getattr__(self, name):
@@ -350,7 +351,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     out["yc_weights"] = 0
     out["yr_weights"] = 0
 
-    if out["yc_hat_all"] is not None:
+    if net.class_output_size > 0:
         yc_ind  = b["yc_ind"].to(dev, non_blocking=True)
         yc_w    = weights_class[yc_ind[1]]
         yc_data = b["yc_data"].to(dev, non_blocking=True)
@@ -361,7 +362,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yc_loss"] = (loss_class(yc_hat, yc_data) * yc_w).sum()
         out["yc_weights"] = yc_w.sum()
 
-    if out["yr_hat_all"] is not None:
+    if net.regr_output_size > 0:
         yr_ind  = b["yr_ind"].to(dev, non_blocking=True)
         yr_w    = weights_regr[yr_ind[1]]
         yr_data = b["yr_data"].to(dev, non_blocking=True)
@@ -498,7 +499,7 @@ def enable_dropout(m):
     if type(m) == torch.nn.Dropout:
         m.train()
 
-def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
+def predict(net, loader, dev, progress=True, dropout=False):
     """
     Makes predictions for all compounds in the loader.
     """
@@ -515,19 +516,104 @@ def predict(net, loader, dev, last_hidden=False, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            y_class, y_regr = net(X, last_hidden=last_hidden)
-            if net.class_output_size > 0:
-                y_class_list.append(y_class.cpu())
-            if net.regr_output_size > 0:
-                y_regr_list.append(y_regr.cpu())
+            y_class, y_regr = net(X)
+            y_class_list.append(torch.sigmoid(y_class).cpu())
+            y_regr_list.append(y_regr.cpu())
 
-    y_class = None
-    y_regr  = None
-    if net.class_output_size > 0:
-        y_class = torch.cat(y_class_list, dim=0)
-    if net.regr_output_size > 0:
-        y_regr  = torch.cat(y_regr_list, dim=0)
-    return y_class, y_regr
+    y_class = torch.cat(y_class_list, dim=0)
+    y_regr  = torch.cat(y_regr_list, dim=0)
+    return y_class.numpy(), y_regr.numpy()
+
+def predict_hidden(net, loader, dev, progress=True, dropout=False):
+    """
+    Returns hidden values for all compounds in the loader.
+    """
+    net.eval()
+    if dropout:
+        net.apply(enable_dropout)
+
+    out_list = []
+
+    with torch.no_grad():
+        for b in tqdm(loader, leave=False, disable=(progress == False)):
+            X = torch.sparse_coo_tensor(
+                    b["x_ind"],
+                    b["x_data"],
+                    size = [b["batch_size"], loader.dataset.input_size]).to(dev)
+            out_list.append( net(X, last_hidden=True).cpu() )
+
+    return torch.cat(out_list, dim=0)
+
+class SparseCollector(object):
+    def __init__(self, label):
+        self.y_hat_list = []
+        self.y_row_list = []
+        self.y_col_list = []
+        self.label = label
+        self.row_count = 0
+
+    def append(self, batch, y_all):
+        """Appends prediction for the given batch."""
+        dev = y_all.device
+
+        if self.label not in batch:
+            return
+        y_ind = batch[self.label].to(dev)
+        y_hat = y_all[y_ind[0], y_ind[1]]
+
+        self.y_hat_list.append(y_hat.cpu())
+        self.y_row_list.append(batch[self.label][0] + self.row_count)
+        self.y_col_list.append(batch[self.label][1])
+        self.row_count += batch["batch_size"]
+
+
+    def tocsr(self, shape, sigmoid):
+        """
+        Returns sparse CSR matrix
+            shape      shape of the matrix
+            sigmoid    whether or not to apply sigmoid
+        """
+        if len(self.y_row_list) == 0:
+            return csr_matrix(shape, dtype=np.float32)
+
+        y_hat = torch.cat(self.y_hat_list, dim=0)
+        if sigmoid:
+            y_hat = torch.sigmoid(y_hat)
+        y_row = torch.cat(self.y_row_list, dim=0).numpy()
+        y_col = torch.cat(self.y_col_list, dim=0).numpy()
+        return csr_matrix((y_hat.numpy(), (y_row, y_col)), shape=shape)
+
+
+
+def predict_sparse(net, loader, dev, progress=True, dropout=False):
+    """
+    Makes predictions for the Y values in loader.
+    Returns sparse matrix of the shape loader.dataset.y.
+    """
+
+    net.eval()
+    if dropout:
+        net.apply(enable_dropout)
+
+    class_collector = SparseCollector("yc_ind")
+    regr_collector  = SparseCollector("yr_ind")
+
+    with torch.no_grad():
+        for b in tqdm(loader, leave=False, disable=(progress == False)):
+            X = torch.sparse_coo_tensor(
+                    b["x_ind"],
+                    b["x_data"],
+                    size = [b["batch_size"], loader.dataset.input_size]).to(dev)
+            yc, yr = net(X)
+            class_collector.append(b, yc)
+            regr_collector.append(b, yr)
+
+        yc_shape = loader.dataset.y_class.shape
+        yr_shape = loader.dataset.y_regr.shape
+        yc_hat = class_collector.tocsr(shape=yc_shape, sigmoid=True)
+        yr_hat = regr_collector.tocsr(shape=yr_shape, sigmoid=False)
+        return yc_hat, yr_hat
+
 
 def fold_transform_inputs(x, folding_size=None, transform="none"):
     """Fold and transform sparse matrix x:
@@ -580,6 +666,13 @@ def load_sparse(filename):
     elif filename.endswith('.npy'):
         return np.load(filename, allow_pickle=True).item().tocsr()
     raise ValueError(f"Loading '{filename}' failed. It must have a suffix '.mtx' or '.npy'.")
+
+def load_check_sparse(filename, shape):
+    y = load_sparse(filename)
+    if y is None:
+        return scipy.sparse.csr_matrix(shape, dtype=np.float32)
+    assert y.shape == shape, f"Shape of sparse matrix {filename} should be {shape} but is {y.shape}."
+    return y
 
 def load_task_weights(filename, y, label):
     """Loads and processes task weights, otherwise raises an error using the label.
@@ -692,3 +785,15 @@ def load_results(filename, two_heads=False):
             data[key][skey]  = pd.read_json(data[key][skey], typ="series")
 
     return data
+
+def keep_row_data(y, keep):
+    """
+    Filters out data where keep is False, replacing them by empty rows.
+    Output is CSR matrix with the size 'y.shape'.
+    Args:
+        y     sparse matrix
+        keep  bool vector, which rows' data to keep. If keep[i] is False i-th row data is removed
+    """
+    ycoo = y.tocoo()
+    mask = keep[ycoo.row]
+    return csr_matrix((ycoo.data[mask], (ycoo.row[mask], ycoo.col[mask])), shape=y.shape)

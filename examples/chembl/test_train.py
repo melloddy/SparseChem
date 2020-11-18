@@ -5,6 +5,7 @@ import sparsechem as sc
 import numpy as np
 import string
 import glob
+import scipy.sparse
 from urllib.request import urlretrieve
 
 def download_chembl23(data_dir="test_chembl23", remove_previous=False):
@@ -75,6 +76,81 @@ def test_classification(dev, data_dir="test_chembl23", rm_output=True):
 
     assert results["validation"]["classification"].shape[0] > 0
 
+    cmd_pred = (
+        f"python predict.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --outprefix {output_dir}/yhat" +
+        f" --conf {conf_file}" +
+        f" --model {model_file}" +
+        f" --dev {dev}"
+    )
+    res_pred = subprocess.run(cmd_pred.split())
+    assert res_pred.returncode == 0
+
+    yhat = np.load(f"{output_dir}/yhat-class.npy")
+    assert results["conf"].class_output_size == yhat.shape[1]
+    assert (yhat >= 0).all()
+    assert (yhat <= 1).all()
+
+    ## checking --last_hidden 1
+    cmd_hidden = (
+        f"python predict.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --outprefix {output_dir}/yhat" +
+        f" --conf {conf_file}" +
+        f" --model {model_file}" +
+        f" --last_hidden 1" +
+        f" --dev {dev}"
+    )
+    res_hidden = subprocess.run(cmd_hidden.split())
+    assert res_hidden.returncode == 0
+
+    hidden = np.load(f"{output_dir}/yhat-hidden.npy")
+    assert results["conf"].hidden_sizes[-1] == hidden.shape[1]
+
+    ## sparse prediction
+    cmd_sparse = (
+        f"python predict.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_class ./{data_dir}/chembl_23mini_y.npy" +
+        f" --outprefix {output_dir}/yhat" +
+        f" --conf {conf_file}" +
+        f" --model {model_file}" +
+        f" --dev {dev}"
+    )
+    res_sparse = subprocess.run(cmd_sparse.split())
+    assert res_sparse.returncode == 0
+    ysparse = sc.load_sparse(f"{output_dir}/yhat-class.npy")
+    ytrue   = sc.load_sparse(f"./{data_dir}/chembl_23mini_y.npy")
+    assert ytrue.shape == ysparse.shape
+    assert type(ysparse) == scipy.sparse.csr.csr_matrix
+    assert (ysparse.data >= 0).all()
+    assert (ysparse.data <= 1).all()
+
+    ytrue_nz = ytrue.nonzero()
+    ysparse_nz = ysparse.nonzero()
+    assert (ytrue_nz[0] == ysparse_nz[0]).all(), "incorrect sparsity pattern"
+    assert (ytrue_nz[1] == ysparse_nz[1]).all(), "incorrect sparsity pattern"
+
+    ## fold filtering
+    cmd_folding = (
+        f"python predict.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --y_class ./{data_dir}/chembl_23mini_y.npy" +
+        f" --folding ./{data_dir}/chembl_23mini_folds.npy" +
+        f" --predict_fold 1 2"
+        f" --outprefix {output_dir}/yhat" +
+        f" --conf {conf_file}" +
+        f" --model {model_file}" +
+        f" --dev {dev}"
+    )
+    res_folding = subprocess.run(cmd_folding.split())
+    assert res_folding.returncode == 0
+    yfolding = sc.load_sparse(f"{output_dir}/yhat-class.npy")
+    ytrue   = sc.load_sparse(f"./{data_dir}/chembl_23mini_y.npy")
+    assert ytrue.shape == yfolding.shape
+    assert type(yfolding) == scipy.sparse.csr.csr_matrix
+    assert (yfolding.data >= 0).all()
+    assert (yfolding.data <= 1).all()
+
+    assert yfolding.nnz < ytrue.nnz
+
     if rm_output:
         shutil.rmtree(output_dir)
 
@@ -130,6 +206,19 @@ def test_regression(dev, data_dir="test_chembl23", rm_output=True):
     assert "validation" in results
 
     assert results["validation"]["regression"].shape[0] > 0
+
+    cmd_pred = (
+        f"python predict.py --x ./{data_dir}/chembl_23mini_x.npy" +
+        f" --outprefix {output_dir}/yhat" +
+        f" --conf {conf_file}" +
+        f" --model {model_file}" +
+        f" --dev {dev}"
+    )
+    res_pred = subprocess.run(cmd_pred.split())
+    assert res_pred.returncode == 0
+
+    yhat = np.load(f"{output_dir}/yhat-regr.npy")
+    assert results["conf"].regr_output_size == yhat.shape[1]
 
     if rm_output:
         shutil.rmtree(output_dir)
@@ -240,7 +329,7 @@ def test_regression_censor_weights(dev, data_dir="test_chembl23", rm_output=True
 
 if __name__ == "__main__":
     test_classification(dev="cuda:0")
-    test_noboard(dev="cuda:0")
-    test_regression(dev="cuda:0")
-    test_regression_censor(dev="cuda:0")
-    test_classification_regression(dev="cuda:0")
+    #test_noboard(dev="cuda:0")
+    #test_regression(dev="cuda:0")
+    #test_regression_censor(dev="cuda:0")
+    #test_classification_regression(dev="cuda:0")

@@ -172,8 +172,6 @@ class SparseFFN(torch.nn.Module):
         if self.class_output_size is None:
             return out
         ## splitting to class and regression
-        if self.class_output_size == 0: return None, out
-        if self.regr_output_size == 0:  return out, None
         return out[:, :self.class_output_size], out[:, self.class_output_size:]
 
 def censored_mse_loss(input, target, censor, censored_enabled=True):

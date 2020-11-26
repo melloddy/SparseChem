@@ -4,7 +4,6 @@ import scipy.io
 import numpy as np
 import pandas as pd
 import torch
-import tqdm
 import sys
 import argparse
 from scipy.sparse import csr_matrix
@@ -25,10 +24,11 @@ def keep_rows(y, keep):
 
 parser = argparse.ArgumentParser(description="Using trained model to make predictions.")
 parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, required=True)
-parser.add_argument("--y", help="Activity file, optional. If provided returns predictions for given activities. (matrix market or numpy)", type=str, required=False)
+parser.add_argument("--y_class", "--y", "--y_classification", help="Sparse pattern file for classification, optional. If provided returns predictions for given locations only (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--y_regr", "--y_regression", help="Sparse pattern file for regression, optional. If provided returns predictions for given locations only (matrix market or numpy)", type=str, default=None)
 parser.add_argument("--folding", help="Folds for rows of y, optional. Needed if only one fold should be predicted.", type=str, required=False)
 parser.add_argument("--predict_fold", help="One or more folds, integer(s). Needed if --folding is provided.", nargs="+", type=int, required=False)
-parser.add_argument("--outfile", help="Output file for predictions (.npy)", type=str, required=True)
+parser.add_argument("--outprefix", help="Prefix for output files, '-class.npy', '-regr.npy' will be appended.", type=str, required=True)
 parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
@@ -40,31 +40,27 @@ args = parser.parse_args()
 
 print(args)
 
-conf = sc.load_results(args.conf)["conf"]
-ecfp = sc.load_sparse(args.x)
-if ecfp is None:
-   parser.print_help()
-   print("--x: Descriptor file must have suffix .mtx or .npy")
-   sys.exit(1) 
+conf = sc.load_results(args.conf, two_heads=True)["conf"]
 
-if conf.fold_inputs is not None:
-    ecfp = sc.fold_inputs(ecfp, folding_size=conf.fold_inputs)
-    print(f"Folding inputs to {ecfp.shape[1]} dimensions.")
+x = sc.load_sparse(args.x)
+x = sc.fold_transform_inputs(x, folding_size=conf.fold_inputs, transform=conf.input_transform)
 
-## error checks for --y, --folding and --predict_fold
+print(f"Input dimension: {x.shape[1]}")
+print(f"#samples:        {x.shape[0]}")
+
+## error checks for --y_class, --y_regr, --folding and --predict_fold
 if args.last_hidden:
-    assert args.y is None, "Cannot use '--last_hidden 1' with sparse predictions ('--y' is specified)."
-if args.y is None:
-    assert args.predict_fold is None, "To use '--predict_fold' please specify '--y'."
-    assert args.folding is None, "To use '--folding' please specify '--y'."
+    assert args.y_class is None, "Cannot use '--last_hidden 1' with sparse predictions ('--y_class' or '--y_regr' is specified)."
+
+
+if args.y_class is None and args.y_regr is None:
+    assert args.predict_fold is None, "To use '--predict_fold' please specify '--y_class' and/or '--y_regr'."
+    assert args.folding is None, "To use '--folding' please specify '--y_class' and/or '--y_regr'."
 else:
     if args.predict_fold is None:
         assert args.folding is None, "If --folding is given please also specify --predict_fold."
     if args.folding is None:
         assert args.predict_fold is None, "If --predict_fold is given please also specify --folding."
-
-print(f"Input dimension: {ecfp.shape[1]}")
-print(f"#samples:        {ecfp.shape[0]}")
 
 dev = args.dev
 net = sc.SparseFFN(conf).to(dev)
@@ -82,29 +78,35 @@ net.load_state_dict(state_dict)
 print(f"Model weights:   '{args.model}'")
 print(f"Model config:    '{args.conf}'.")
 
-## creating/loading y
-if args.y is None:
-    y = csr_matrix((ecfp.shape[0], conf.output_size), dtype=np.float32)
+y_class = sc.load_check_sparse(args.y_class, (x.shape[0], conf.class_output_size))
+y_regr  = sc.load_check_sparse(args.y_regr, (x.shape[0], conf.regr_output_size))
+
+if args.folding is not None:
+    folding = np.load(args.folding) if args.folding else None
+    assert folding.shape[0] == x.shape[0], f"Folding has {folding.shape[0]} rows and X has {x.shape[0]}. Must be equal."
+    keep    = np.isin(folding, args.predict_fold)
+    y_class = sc.keep_row_data(y_class, keep)
+    y_regr  = sc.keep_row_data(y_regr, keep)
+
+dataset_te = sc.ClassRegrSparseDataset(x=x, y_class=y_class, y_regr=y_regr)
+loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = 4, pin_memory=True, collate_fn=dataset_te.collate)
+
+if args.last_hidden:
+    ## saving only hidden layer
+    out      = sc.predict_hidden(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
+    filename = f"{args.outprefix}-hidden.npy"
+    np.save(filename, out.numpy())
+    print(f"Saved (numpy) matrix of hiddens to '{filename}'.")
 else:
-    y = sc.load_sparse(args.y)
-    assert y is not None, f"Unsupported filetype for --y: '{args.y}'."
-    assert ecfp.shape[0] == y.shape[0], f"The number of rows in X ({ecfp.shape[0]}) must be equal to the number of rows in Y ({y.shape[0]})."
-    assert y.shape[1] == conf.output_size, f"Y matrix has {y.shape[1]} columns and model has {conf.output_size}. They must be equal."
-    if args.predict_fold is not None:
-        folding = np.load(args.folding)
-        assert folding.shape[0] == ecfp.shape[0], f"Folding has {folding.shape[0]} rows and X has {ecfp.shape[0]}. Must be equal."
-        keep    = np.isin(folding, args.predict_fold)
-        y       = keep_rows(y, keep)
+    if args.y_class is None and args.y_regr is None:
+        class_out, regr_out = sc.predict(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
+    else:
+        class_out, regr_out = sc.predict_sparse(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
 
-dataset_te = sc.SparseDataset(x=ecfp, y=y)
-loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = 4, pin_memory=True, collate_fn=sc.sparse_collate)
-
-if args.y is None:
-    out = sc.predict(net, loader_te, dev, last_hidden=args.last_hidden, dropout=args.dropout)
-    out = out.numpy()
-else:
-    out = sc.predict_sparse(net, loader_te, dev, dropout=args.dropout, progress=True)
-
-np.save(args.outfile, out)
-print(f"Saved prediction matrix (numpy) to '{args.outfile}'.")
+    if net.class_output_size > 0:
+        np.save(f"{args.outprefix}-class.npy", class_out)
+        print(f"Saved prediction matrix (numpy) for classification to '{args.outprefix}-class.npy'.")
+    if net.regr_output_size > 0:
+        np.save(f"{args.outprefix}-regr.npy", regr_out)
+        print(f"Saved prediction matrix (numpy) for regression to '{args.outprefix}-regr.npy'.")
 

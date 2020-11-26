@@ -1,6 +1,7 @@
 # Copyright (c) 2020 KU Leuven
 import torch
 import math
+import numpy as np
 from torch import nn
 
 non_linearities = {
@@ -107,7 +108,7 @@ class MiddleNet(torch.nn.Module):
         self.net = nn.Sequential()
         for i in range(len(conf.hidden_sizes) - 1):
             self.net.add_module(f"layer_{i}", nn.Sequential(
-                nn.ReLU(),
+                non_linearities[conf.middle_non_linearity](),
                 nn.Dropout(conf.middle_dropout),
                 nn.Linear(conf.hidden_sizes[i], conf.hidden_sizes[i+1], bias=True),
             ))
@@ -146,6 +147,12 @@ class LastNet(torch.nn.Module):
 class SparseFFN(torch.nn.Module):
     def __init__(self, conf):
         super().__init__()
+        if hasattr(conf, "class_output_size"):
+            self.class_output_size = conf.class_output_size
+            self.regr_output_size  = conf.regr_output_size
+        else:
+            self.class_output_size = None
+            self.regr_output_size  = None
 
         self.net = nn.Sequential(
             SparseInputNet(conf),
@@ -153,21 +160,68 @@ class SparseFFN(torch.nn.Module):
             LastNet(conf),
         )
 
+    @property
+    def has_2heads(self):
+        return self.class_output_size is not None
+
     def forward(self, X, last_hidden=False):
         if last_hidden:
             H = self.net[:-1](X)
             return self.net[-1].net[:-1](H)
-        return self.net(X)
+        out = self.net(X)
+        if self.class_output_size is None:
+            return out
+        ## splitting to class and regression
+        return out[:, :self.class_output_size], out[:, self.class_output_size:]
 
-def federated_model1(conf):
+def censored_mse_loss(input, target, censor, censored_enabled=True):
     """
-    Federated model in Melloddy, version 1.
+    Computes for each value the censored MSE loss.
+    Args:
+        input     tensor of predicted values
+        target    tensor of true values
+        censor    tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
     """
-    head_model = LastNet(conf)
-    trunk_model = nn.Sequential(
-        SparseInputNet(conf),
-        MiddleNet(conf),
-    )
-    return nn.Sequential(trunk_model, head_model)
+    y_diff = target - input
+    if censor is not None and censored_enabled:
+        y_diff = torch.where(censor==0, y_diff, torch.relu(censor * y_diff))
+    return y_diff * y_diff
 
+def censored_mae_loss(input, target, censor):
+    """
+    Computes for each value the censored MAE loss.
+    Args:
+        input    tensor of predicted values
+        target   tensor of true values
+        censor   tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = torch.where(censor==0, y_diff, torch.relu(censor * y_diff))
+    return torch.abs(y_diff)
 
+def censored_mse_loss_numpy(input, target, censor):
+    """
+    Computes for each value the censored MSE loss in *Numpy*.
+    Args:
+        input     tensor of predicted values
+        target    tensor of true values
+        censor    tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = np.where(censor==0, y_diff, np.clip(censor * y_diff, a_min=0, a_max=None))
+    return y_diff * y_diff
+
+def censored_mae_loss_numpy(input, target, censor):
+    """
+    Computes for each value the censored MSE loss in *Numpy*.
+    Args:
+        input     tensor of predicted values
+        target    tensor of true values
+        censor    tensor of censor masks: -1 lower, 0 no and +1 upper censoring.
+    """
+    y_diff = target - input
+    if censor is not None:
+        y_diff = np.where(censor==0, y_diff, np.clip(censor * y_diff, a_min=0, a_max=None))
+    return np.abs(y_diff)

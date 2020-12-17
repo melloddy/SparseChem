@@ -18,10 +18,10 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
-parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, default=None)
-parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market or numpy)", type=str, default=None)
-parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix market or numpy)", type=str, default=None)
-parser.add_argument("--y_censor", help="Censor mask for regression (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, default=None)
+parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market, .npy or .npz)", type=str, default=None)
+parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix market, .npy or .npz)", type=str, default=None)
+parser.add_argument("--y_censor", help="Censor mask for regression (matrix market, .npy or .npz)", type=str, default=None)
 parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, training_weight, aggregation_weight, task_type (for classification tasks)", type=str, default=None)
 parser.add_argument("--weights_regr", "--weights_regression", help="CSV file with columns task_id, training_weight, censored_weight, aggregation_weight, aggregation_weight, task_type (for regression tasks)", type=str, default=None)
 parser.add_argument("--censored_loss", help="Whether censored loss is used for training (default 1)", type=int, default=1)

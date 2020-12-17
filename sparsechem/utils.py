@@ -672,7 +672,9 @@ def load_sparse(filename):
         return scipy.io.mmread(filename).tocsr()
     elif filename.endswith('.npy'):
         return np.load(filename, allow_pickle=True).item().tocsr()
-    raise ValueError(f"Loading '{filename}' failed. It must have a suffix '.mtx' or '.npy'.")
+    elif filename.endswith('.npz'):
+        return scipy.sparse.load_npz(filename).tocsr()
+    raise ValueError(f"Loading '{filename}' failed. It must have a suffix '.mtx', '.npy', '.npz'.")
 
 def load_check_sparse(filename, shape):
     y = load_sparse(filename)

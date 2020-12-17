@@ -23,9 +23,9 @@ def keep_rows(y, keep):
     return csr_matrix((ycoo.data[mask], (ycoo.row[mask], ycoo.col[mask])), shape=y.shape)
 
 parser = argparse.ArgumentParser(description="Using trained model to make predictions.")
-parser.add_argument("--x", help="Descriptor file (matrix market or numpy)", type=str, required=True)
-parser.add_argument("--y_class", "--y", "--y_classification", help="Sparse pattern file for classification, optional. If provided returns predictions for given locations only (matrix market or numpy)", type=str, default=None)
-parser.add_argument("--y_regr", "--y_regression", help="Sparse pattern file for regression, optional. If provided returns predictions for given locations only (matrix market or numpy)", type=str, default=None)
+parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, required=True)
+parser.add_argument("--y_class", "--y", "--y_classification", help="Sparse pattern file for classification, optional. If provided returns predictions for given locations only (matrix market, .npy or .npz)", type=str, default=None)
+parser.add_argument("--y_regr", "--y_regression", help="Sparse pattern file for regression, optional. If provided returns predictions for given locations only (matrix market, .npy or .npz)", type=str, default=None)
 parser.add_argument("--folding", help="Folds for rows of y, optional. Needed if only one fold should be predicted.", type=str, required=False)
 parser.add_argument("--predict_fold", help="One or more folds, integer(s). Needed if --folding is provided.", nargs="+", type=int, required=False)
 parser.add_argument("--outprefix", help="Prefix for output files, '-class.npy', '-regr.npy' will be appended.", type=str, required=True)

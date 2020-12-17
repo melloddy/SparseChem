@@ -159,8 +159,8 @@ There is an option `--dropout 1` to switch on the dropout during predictions to 
 
 ## Sparse predictions
 It is also possible to predict only **selected elements** instead of the whole output matrix (either classification and/or regression):
-* add `--y_class y_class_to_predict.npy` (.npy or .mtx) for classification,
-* add `--y_regr y_regr_to_predict.npy` (.npy or .mtx) for regression.
+* add `--y_class y_class_to_predict.npy` (.npy, .npz or .mtx) for classification,
+* add `--y_regr y_regr_to_predict.npy` (.npy, .npz or .mtx) for regression.
 If added, these matrices specify locations where to make predictions to.
 
 Here is an example for classification:
@@ -195,10 +195,10 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 
 ## Full list of all command line arguments
 
-* __--x__: Descriptor file (matrix or numpy) (str)
-* __--y_class | --y | --y_classification__: Activity file (matrix or numpy (str)
-* __--y_regr | --y_regression__: Activity file (matrix or numpy) (str)
-* __--y_censor__: Censor mask for regression (matrix market or numpy)
+* __--x__: Activity file (matrix market, .npy or .npz) (str)
+* __--y_class | --y | --y_classification__: Activity file (matrix market, .npy or .npz) (str)
+* __--y_regr | --y_regression__: Activity file (matrix market, .npy or .npz) (str)
+* __--y_censor__: Censor mask for regression (matrix market, .npy or .npz) (str)
 * __--weights_class | --task_weights | --weights_classification__: CSV file with columns task_id, training_weight, aggregation_weight, task_type (for classification tasks) (str)
 * __--weights_regr | --weights_regression__: CSV file with columns task_id, training_weight, censored_weight, aggregation_weight, aggregation_weight, task_type (for regression tasks) (str)
 * __--censored_loss__: Set this to 0 if censored loss should not be used for training (int, default=1)

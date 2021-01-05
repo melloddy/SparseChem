@@ -4,6 +4,7 @@ import scipy.io
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
 import sys
 import argparse
 from scipy.sparse import csr_matrix
@@ -112,10 +113,11 @@ print(f"Model weights:   '{args.model}'")
 print(f"Model config:    '{args.conf}'.")
 
 #Freeze whole federated model
-net.0.net_freq.weight.requires_grad=False
-net.0.net_freq.bias.requires_grad=False
-net.2.net.2.weight.requires_grad=False
-net.2.net.2.bias.requires_grad=False
+#TODO feezing code sth like this ...
+#net.0.net_freq.weight.requires_grad=False
+#net.0.net_freq.bias.requires_grad=False
+#net.2.net.2.weight.requires_grad=False
+#net.2.net.2.bias.requires_grad=False
 #Now split in head and trunk
 fed_head, fed_trunk = unstack_SparseFFN_model(net)
 

@@ -113,11 +113,13 @@ print(f"Model weights:   '{args.model}'")
 print(f"Model config:    '{args.conf}'.")
 
 #Freeze whole federated model
-#TODO feezing code sth like this ...
-#net.0.net_freq.weight.requires_grad=False
-#net.0.net_freq.bias.requires_grad=False
-#net.2.net.2.weight.requires_grad=False
-#net.2.net.2.bias.requires_grad=False
+#feezing code sth like this ...
+net.net[0].weight.requires_grad=False
+net.net[0].bias.requires_grad=False
+net.net[1].weight.requires_grad=False
+net.net[1].bias.requires_grad=False
+net.net[2].weight.requires_grad=False
+net.net[2].bias.requires_grad=False
 #Now split in head and trunk
 fed_head, fed_trunk = unstack_SparseFFN_model(net)
 

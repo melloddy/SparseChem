@@ -124,14 +124,14 @@ class MiddleNet(torch.nn.Module):
         return self.net(H)
 
 class LastNet(torch.nn.Module):
-    def __init__(self, conf):
+    def __init__(self, conf, extra_input_size=0):
         super().__init__()
         self.non_linearity = conf.last_non_linearity
         non_linearity = non_linearities[conf.last_non_linearity]
         self.net = nn.Sequential(
             non_linearity(),
             nn.Dropout(conf.last_dropout),
-            nn.Linear(conf.hidden_sizes[-1], conf.output_size),
+            nn.Linear(conf.hidden_sizes[-1]+extra_input_size, conf.output_size),
         )
         self.apply(self.init_weights)
 

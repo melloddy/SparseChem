@@ -6,11 +6,17 @@ import pandas as pd
 import torch
 from torch import nn
 import sys
+import os
 import argparse
+import time
 from scipy.sparse import csr_matrix
 from torch.utils.data import DataLoader
 from scipy.special import expit
 from collections import OrderedDict
+from sparsechem import Nothing
+from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import MultiStepLR
+from torch.utils.tensorboard import SummaryWriter
 
 def unstack_SparseFFN_model(model):
     sparse_input = model.net[0]
@@ -24,17 +30,31 @@ def unstack_SparseFFN_model(model):
 
 
 class SparseFFN_combined(nn.Module):
-  def __init__(self, shared_trunk, local_trunk, head):
+  def __init__(self, conf, shared_trunk, local_trunk, head):
+    super().__init__()
+    if hasattr(conf, "class_output_size"):
+       self.class_output_size = conf.class_output_size
+       self.regr_output_size  = conf.regr_output_size
+    else:
+       self.class_output_size = None
+       self.regr_output_size  = None
     self.shared_trunk = shared_trunk
     self.local_trunk  = local_trunk
     self.head = head
 
+  @property
+  def has_2heads(self):
+    return self.class_output_size is not None
   def forward(self, input):
     shared_output = self.shared_trunk(input)
     local_output  = self.local_trunk(input)
-    combined = torch.cat(shared_output,local_output, dim=1)
+    combined = torch.cat((shared_output,local_output), dim=1)
     out = self.head(combined)
-    return out
+    if self.class_output_size is None:
+       return out
+     ## splitting to class and regression
+    return out[:, :self.class_output_size], out[:, self.class_output_size:]
+
 
 parser = argparse.ArgumentParser(description="Using trained fixed trunk model and retrain with local trunk and new head.")
 parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, default=None)
@@ -112,17 +132,19 @@ net.load_state_dict(state_dict)
 print(f"Model weights:   '{args.model}'")
 print(f"Model config:    '{args.conf}'.")
 
+print(net)
 #Freeze whole federated model
 #feezing code sth like this ...
-net.net[0].weight.requires_grad=False
-net.net[0].bias.requires_grad=False
-net.net[1].weight.requires_grad=False
-net.net[1].bias.requires_grad=False
-net.net[2].weight.requires_grad=False
-net.net[2].bias.requires_grad=False
+#net.net[0].weight.requires_grad=False
+#net.net[0].bias.requires_grad=False
+#net.net[1].weight.requires_grad=False
+#net.net[1].bias.requires_grad=False
+#net.net[2].weight.requires_grad=False
+#net.net[2].bias.requires_grad=False
 #Now split in head and trunk
 fed_head, fed_trunk = unstack_SparseFFN_model(net)
-
+for param in fed_trunk.parameters():
+    param.requires_grad = False
 
 if args.save_board:
     tb_name = os.path.join(args.output_dir, "boards", name)
@@ -245,7 +267,7 @@ local_trunk = nn.Sequential(
                 sc.SparseInputNet(args),
                 sc.MiddleNet(args)
              )
-net = SparseFFN_combined(fed_trunk, local_trunk, newhead).to(dev)
+net = SparseFFN_combined(args, fed_trunk, local_trunk, newhead).to(dev)
 
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")
 loss_regr  = sc.censored_mse_loss

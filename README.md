@@ -6,7 +6,7 @@ The general documentation can be found in this [folder](docs/).
 
 # Local trunk branch
 
-In this branch an extra script is created [retrain](examples/chembl/retrain.py). The objective for this script is to start with a given pretrained (federated) sparsechem model and integrate and fix the trunk of this model inside a new model. This new model will provide an extra local trunk and on top a new head. The local trunk and new head will be trained using local data while the given pretrained trunk will not be altered.
+In this branch an extra script is created: [retrain.py](examples/chembl/retrain.py). The objective for this script is to start with a given pretrained (federated) sparsechem model and integrate and fix the trunk of this model inside a new model. This new model will provide an extra local trunk and on top a new head. The local trunk and new head will be trained using local data while the given pretrained trunk will not be altered.
 
 # How to use retrain script
 

@@ -28,4 +28,4 @@ FOLD_TEST=0
 FOLD_VALIDATION=1
 ```
 
-after hyperparameter tuning, the federated model was trained in phase 2 also including the `FOLD_VALIDATION=1` only leaving out `FOLD_TEST=0`. So for local retraining using local trunk the suggestion is to split up this `FOLD_TEST=0 `in `FOLD_LOCAL_VAL=0.1` and `FOLD_LOCAL_TEST=0.2`. However the way how to do it is not defined yet and still under discussion. So for the first 'sanity tests' the only fold available to evaluate the trained model is `FOLD=0`.
+after hyperparameter tuning, the federated model was trained in phase 2 also including the `FOLD_VALIDATION=1` only leaving out `FOLD_TEST=0`. So for local retraining using local trunk the suggestion is to split up this `FOLD_TEST=0 `in `FOLD_LOCAL_VAL=0.1` and `FOLD_LOCAL_TEST=0.2`. However the way how to do it is not defined yet and still under discussion. So for the first 'sanity tests' the only fold available to evaluate the trained model (including HP tuning which is a problem for overfitting) is `FOLD=0`.

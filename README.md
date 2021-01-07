@@ -18,3 +18,14 @@ The same parameters as the [train script](example/chembl/train.py) should be pro
 ```
 
 The output of this script is similar as the regular [train script](example/chembl/train.py).
+
+# Fold setup
+
+In the federated run these folds were used:
+
+```
+FOLD_TEST=0
+FOLD_VALIDATION=1
+```
+
+after hyperparameter tuning, the federated model was trained in phase 2 also including the `FOLD_VALIDATION=1` only leaving out `FOLD_TEST=0`. So for local retraining using local trunk the suggestion is to split up this `FOLD_TEST=0 `in `FOLD_LOCAL_VAL=0.1` and `FOLD_LOCAL_TEST=0.2`. However the way how to do it is not defined yet and still under discussion. So for the first 'sanity tests' the only fold available to evaluate the trained model is `FOLD=0`.

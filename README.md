@@ -29,3 +29,28 @@ FOLD_VALIDATION=1
 ```
 
 after hyperparameter tuning, the federated model was trained in phase 2 also including the `FOLD_VALIDATION=1` only leaving out `FOLD_TEST=0`. So for local retraining using local trunk the suggestion is to split up this `FOLD_TEST=0 `in `FOLD_LOCAL_VAL=0.1` and `FOLD_LOCAL_TEST=0.2`. However the way how to do it is not defined yet and still under discussion. So for the first 'sanity tests' the only fold available to evaluate the trained model (including HP tuning which is a problem for overfitting) is `FOLD=0`.
+
+# Example run
+
+For running the retrain script this example could be used:
+
+```
+python retrain.py \
+  --x ./chembl_23_x.npy \
+  --y ./chembl_23_y.npy \
+  --folding ./folding_hier_0.6.npy \
+  --fold_va 0 \
+  --batch_ratio    0.02 \
+  --hidden_sizes   400 \
+  --last_dropout   0.2 \
+  --middle_dropout 0.2 \
+  --weight_decay   0.0 \
+  --epochs         20 \
+  --lr             1e-3 \
+  --lr_steps       10 \
+  --lr_alpha       0.3
+  --conf hyperparameters.json
+  --model federated_model.pt
+```
+
+The conf file is only used to be able to read out correctly the federated model. It is not taken into account for the hyperparameters. The hyperparameters for training of the local trunk (and new head) should be set using the cli.

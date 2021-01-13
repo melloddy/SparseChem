@@ -56,3 +56,18 @@ python retrain.py \
 ```
 
 The conf file is only used to be able to read out correctly the federated model. It is not taken into account for the hyperparameters. The hyperparameters for training of the local trunk (and new head) should be set using the cli.
+
+# Example predict step
+
+In order to evaluate the newly trained model a separate predict script is also provided: [predict_local_trunk.py](examples/chembl/predict_local_trunk.py). Apart from the newly trained model now two confif files need to be provided:
+1. The config file from the federated model. (--fedconf)
+2. The config file saved together with the newly trained model. (--conf)
+
+Example:
+```
+python predict_local_trunk.py --x chembl_23mini_x.npy --y chembl_23mini_y.npy \
+--folding chembl_23mini_folds.npy --fedconf models/hyperparameters.json \
+--conf models/sc_run_h700.700_ldo0.2_wd0.0_lr0.001_lrsteps10_ep20_fva0_fteNone.json \
+--model models/sc_run_h700.700_ldo0.2_wd0.0_lr0.001_lrsteps10_ep20_fva0_fteNone.pt \
+--predict_fold 0 --dev cpu --outprefix testing
+```

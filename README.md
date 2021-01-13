@@ -59,7 +59,7 @@ The conf file is only used to be able to read out correctly the federated model.
 
 # Example predict step
 
-In order to evaluate the newly trained model a separate predict script is also provided: [predict_local_trunk.py](examples/chembl/predict_local_trunk.py). Apart from the newly trained model now two confif files need to be provided:
+In order to evaluate the newly trained model, a separate predict script is also provided: [predict_local_trunk.py](examples/chembl/predict_local_trunk.py). Together with the newly trained model now two config files need to be provided:
 1. The config file from the federated model. (--fedconf)
 2. The config file saved together with the newly trained model. (--conf)
 

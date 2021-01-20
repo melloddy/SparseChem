@@ -10,5 +10,6 @@ from .utils import predict, predict_hidden, predict_sparse
 from .utils import print_metrics, print_metrics_cr
 from .utils import load_sparse, load_check_sparse, load_results, save_results, load_task_weights
 from .utils import Nothing
+from .utils import normalize_regr
 from .utils import keep_row_data
 from .version import __version__

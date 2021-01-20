@@ -10,6 +10,7 @@ import scipy.special
 import types
 import json
 import warnings
+import math
 import torch.nn.functional as F
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
@@ -30,6 +31,22 @@ class Nothing(object):
         return Nothing()
     def __repr__(self):
         return "Nothing"
+
+def normalize_regr(y_regr, mean=None, std=None):
+    if mean is not None:
+       m     = mean
+       stdev = std
+    else:
+       m   = y_regr.data.mean()
+       N = y_regr.count_nonzero()
+       sqr = y_regr.copy()
+       sqr.data **= 2
+       variance = sqr.sum()/N - m**2
+       stdev = math.sqrt(variance)
+
+    y_regr.data -= m                                                                                                                                                            
+    y_regr.data /= stdev
+    return y_regr, m, stdev 
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)

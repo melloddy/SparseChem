@@ -31,6 +31,7 @@ parser.add_argument("--fold_te", help="Test fold number (removed from dataset)",
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
 parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
+parser.add_argument("--normalize_regression", help="Set this to 1 if the regression tasks should be normalized", type=int, default=0)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
@@ -163,6 +164,9 @@ y_regr_va  = y_regr[idx_va]
 y_censor_tr = y_censor[idx_tr]
 y_censor_va = y_censor[idx_va]
 
+if args.normalize_regression == 1:
+   y_regr_tr, mean, std = sc.normalize_regr(y_regr_tr) 
+   y_regr_va, mean, std = sc.normalize_regr(y_regr_va, mean, std)
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])

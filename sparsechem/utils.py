@@ -754,11 +754,14 @@ def load_task_weights(filename, y, label):
 
     return res
 
-def save_results(filename, conf, validation, training):
+def save_results(filename, conf, validation, training, stats=None):
     """Saves conf and results into json file. Validation and training can be None."""
     out = {}
     out["conf"] = conf.__dict__
-
+    if stats is not None:
+        out["stats"] = {}
+        for key in ["mean", "std"]:
+            out["stats"][key] = stats[key]
     if validation is not None:
         out["validation"] = {}
         for key in ["classification", "classification_agg", "regression", "regression_agg"]:

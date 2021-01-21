@@ -112,11 +112,12 @@ python train.py \
   --epochs         20 \
   --lr             1e-3 \
   --lr_steps       10 \
-  --lr_alpha       0.3
+  --lr_alpha       0.3 \
+  --normalize_regression 0
 ```
 We matrix for `--y_regr` is sparse matrix (similar to classification).
 For which SparseChem minimizes the mean squared error (MSE) loss.
-Note we have also switched the non-linearity to `tanh`.
+Note we have also switched the non-linearity to `tanh`. For regression there is also the option to normalize the training regression values setting `--normalize_regression` to 1.
 
 ## Censored regression
 It is possible to use censored regression by passing an extra sparse matrix with `--y_censor chembl_censor.npy` that has the same sparsity pattern as `--y_regr`.

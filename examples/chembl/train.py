@@ -164,10 +164,12 @@ y_regr_va  = y_regr[idx_va]
 y_censor_tr = y_censor[idx_tr]
 y_censor_va = y_censor[idx_va]
 
+normalize_inv = None
 if args.normalize_regression == 1:
    y_regr_tr, mean_save, std_save = sc.normalize_regr(y_regr_tr) 
-   #Temporary test. Needs to be revised, so that predictions are corrected using mean and std
-   y_regr_va, mean, std = sc.normalize_regr(y_regr_va, mean_save, std_save)
+   normalize_inv={}
+   normalize_inv["mean"] = mean_save
+   normalize_inv["std"]  = std_save
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
@@ -233,7 +235,7 @@ for epoch in range(args.epochs):
     last_round = epoch == args.epochs - 1
 
     if eval_round or last_round:
-        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)
+        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv)
         for key, val in results_va["classification_agg"].items():
             writer.add_scalar(key+"/va", val, epoch)
         for key, val in results_va["regression_agg"].items():

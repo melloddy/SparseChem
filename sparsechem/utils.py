@@ -359,7 +359,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu"):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
@@ -367,7 +367,9 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         size = [b["batch_size"], input_size]).to(dev, non_blocking=True)
 
     yc_hat_all, yr_hat_all = net(X)
-
+    if normalize_inv is not None:
+       yr_hat_all.data *= normalize_inv["std"]
+       yr_hat_all.data += normalize_inv["mean"]
     out = {}
     out["yc_hat_all"] = yc_hat_all
     out["yr_hat_all"] = yr_hat_all
@@ -448,7 +450,7 @@ def aggregate_results(df, weights):
     df2 = df.where(pd.isnull, 1) * weights[:,None]
     return (df2.multiply(1.0 / df2.sum(axis=0), axis=1) * df).sum(axis=0)
 
-def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True):
+def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None):
     class_w = tasks_class.aggregation_weight
     regr_w  = tasks_regr.aggregation_weight
 
@@ -471,7 +473,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
-            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev)
+            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev, normalize_inv=normalize_inv)
             loss_class_sum += fwd["yc_loss"]
             loss_regr_sum  += fwd["yr_loss"]
             loss_class_weights += fwd["yc_weights"]

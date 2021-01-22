@@ -166,6 +166,7 @@ y_censor_va = y_censor[idx_va]
 
 if args.normalize_regression == 1:
    y_regr_tr, mean_save, std_save = sc.normalize_regr(y_regr_tr) 
+   #Temporary test. Needs to be revised, so that predictions are corrected using mean and std
    y_regr_va, mean, std = sc.normalize_regr(y_regr_va, mean_save, std_save)
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()

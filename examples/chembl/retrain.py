@@ -97,6 +97,7 @@ parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for tr
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
+parser.add_argument("--disable_fed_dropout", help="Set this to 1 to disable the dropout in the shared trunk", type=int, default=0)
 
 args = parser.parse_args()
 
@@ -145,6 +146,10 @@ print(net)
 fed_head, fed_trunk = unstack_SparseFFN_model(net)
 for param in fed_trunk.parameters():
     param.requires_grad = False
+
+if args.disable_fed_dropout == 1:
+   fed_trunk.eval()
+   print("disabling dropout for shared trunk ...")
 
 if args.save_board:
     tb_name = os.path.join(args.output_dir, "boards", name)

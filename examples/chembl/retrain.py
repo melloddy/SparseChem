@@ -71,6 +71,7 @@ parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.0
 parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
 parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
+parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes", default=None, type=int)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
 parser.add_argument("--weight_decay", help="Weight decay", type=float, default=0.0)
@@ -100,7 +101,8 @@ parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, requir
 parser.add_argument("--disable_fed_dropout", help="Set this to 1 to disable the dropout in the shared trunk", type=int, default=0)
 
 args = parser.parse_args()
-
+if args.last_hidden_sizes is None:
+   args.last_hidden_sizes = []
 def vprint(s=""):
     if args.verbose:
         print(s)
@@ -116,7 +118,7 @@ else:
 vprint(f"Run name is '{name}'.")
 
 conf = sc.load_results(args.conf, two_heads=True)["conf"]
-
+setattr(conf, "last_hidden_sizes", [])
 dev = args.dev
 net = sc.SparseFFN(conf).to(dev)
 state_dict = torch.load(args.model, map_location=torch.device(dev))

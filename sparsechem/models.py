@@ -126,13 +126,34 @@ class MiddleNet(torch.nn.Module):
 class LastNet(torch.nn.Module):
     def __init__(self, conf, extra_input_size=0):
         super().__init__()
-        self.non_linearity = conf.last_non_linearity
-        non_linearity = non_linearities[conf.last_non_linearity]
-        self.net = nn.Sequential(
-            non_linearity(),
-            nn.Dropout(conf.last_dropout),
-            nn.Linear(conf.hidden_sizes[-1]+extra_input_size, conf.output_size),
-        )
+        if len(conf.last_hidden_sizes) > 0:
+           self.net = nn.Sequential()
+           output_size_initial = conf.last_hidden_sizes[0]
+           self.net.add_module(f"initial_layer", nn.Sequential(
+               non_linearities[conf.last_non_linearity](),
+               nn.Dropout(conf.last_dropout),
+               nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size_initial),
+           ))
+           for i in range(len(conf.last_hidden_sizes) - 1):
+               self.net.add_module(f"layer_{i}", nn.Sequential(
+                   non_linearities[conf.last_non_linearity](),
+                   nn.Dropout(conf.last_dropout),
+                   nn.Linear(conf.last_hidden_sizes[i], conf.last_hidden_sizes[i+1], bias=True),
+               ))
+           self.net.add_module(f"last_layer", nn.Sequential(
+                non_linearities[conf.last_non_linearity](),
+                nn.Dropout(conf.last_dropout),
+                nn.Linear(conf.last_hidden_sizes[-1], conf.output_size),
+            ))
+        else:
+          self.non_linearity = conf.last_non_linearity
+          non_linearity = non_linearities[conf.last_non_linearity]
+          self.net = nn.Sequential(
+              non_linearity(),
+              nn.Dropout(conf.last_dropout),
+              nn.Linear(conf.hidden_sizes[-1]+extra_input_size, conf.output_size),
+          )
+
         self.apply(self.init_weights)
 
     def init_weights(self, m):

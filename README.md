@@ -57,6 +57,14 @@ python retrain.py \
 
 The conf file is only used to be able to read out correctly the federated model. It is not taken into account for the hyperparameters. The hyperparameters for training of the local trunk (and new head) should be set using the cli.
 
+# Disable dropout for shared trunk
+
+There is also the possibility to disable dropout of the shared trunk while retraining by setting the option `--disable_fed_dropout 1`.
+
+# Add hidden layers to head
+
+By setting this parameter layers can be added to the head `last_hidden_sizes 200 200`.
+
 # Example predict step
 
 In order to evaluate the newly trained model, a separate predict script is also provided: [predict_local_trunk.py](examples/chembl/predict_local_trunk.py). Together with the newly trained model now two config files need to be provided:

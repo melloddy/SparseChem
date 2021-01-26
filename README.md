@@ -63,7 +63,7 @@ There is also the possibility to disable dropout of the shared trunk while retra
 
 # Add hidden layers to head
 
-By setting this parameter layers can be added to the head `last_hidden_sizes 200 200`.
+By setting this parameter `last_hidden_sizes 200 200`, layers can be added to the head .
 
 # Example predict step
 

@@ -166,10 +166,10 @@ y_censor_va = y_censor[idx_va]
 
 normalize_inv = None
 if args.normalize_regression == 1:
-   y_regr_tr, mean_save, std_save = sc.normalize_regr(y_regr_tr) 
+   y_regr_tr, mean_save, var_save = sc.normalize_regr(y_regr_tr) 
    normalize_inv={}
    normalize_inv["mean"] = mean_save
-   normalize_inv["std"]  = std_save
+   normalize_inv["var"]  = var_save
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
@@ -286,7 +286,7 @@ stats=None
 if args.normalize_regression == 1 :
    stats={}
    stats["mean"] = mean_save
-   stats["std"]  = std_save
+   stats["var"]  = var_save
 sc.save_results(out_file, args, validation=results_va, training=results_tr, stats=stats)
 
 vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  import sparsechem as sc\n  res = sc.load_results('{out_file}')")

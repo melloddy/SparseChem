@@ -32,21 +32,53 @@ class Nothing(object):
     def __repr__(self):
         return "Nothing"
 
+def inverse_normalization(yr_hat_all, mean, variance):
+   # y_mask = yr_hat_all.copy()
+   # y_mask.data = np.ones_like(y_mask.data)
+    mean = torch.tensor(np.array(mean)[0]).unsqueeze(dim=0)
+    mean_stacked = torch.tensor(np.array(mean)[0]).unsqueeze(dim=0)
+    for i in range(yr_hat_all.shape[0]-1):
+        mean_stacked = torch.cat((mean_stacked, mean), dim=0)
+    #import ipdb; ipdb.set_trace()
+   # diagm = scipy.sparse.diags(np.array(mean)[0], 0)
+    stdev = np.sqrt(variance)
+    stdev = torch.tensor(np.array(stdev)[0]).unsqueeze(dim=0)
+    stdev_stacked = torch.tensor(np.array(stdev)[0]).unsqueeze(dim=0)
+    for i in range(yr_hat_all.shape[0]-1):
+        stdev_stacked = torch.cat((stdev_stacked, stdev), dim=0)
+    y_inv_norm = yr_hat_all * stdev_stacked
+    #import ipdb; ipdb.set_trace()
+    y_inv_norm = y_inv_norm + mean_stacked
+
+   # diagstdev = scipy.sparse.diags(np.array(stdev)[0],0)
+   # y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
+   # y_inv_norm = y_inv_norm + y_mask * diagm
+    return y_inv_norm
+
 def normalize_regr(y_regr, mean=None, std=None):
     if mean is not None:
        m     = mean
        stdev = std
     else:
-       m   = y_regr.data.mean()
-       N = y_regr.count_nonzero()
+       m = y_regr.mean(axis=0)
+       N = y_regr.getnnz(axis=0)
+       diagm = scipy.sparse.diags(np.array(m)[0], 0)
+       y_mask = y_regr.copy()
+       y_mask.data = np.ones_like(y_mask.data)
+       y_normalized = y_regr - y_mask * diagm
        sqr = y_regr.copy()
        sqr.data **= 2
-       variance = sqr.sum()/N - m**2
-       stdev = math.sqrt(variance)
-
-    y_regr.data -= m                                                                                                                                                            
-    y_regr.data /= stdev
-    return y_regr, m, stdev 
+       msquared = np.square(m)
+      # import ipdb; ipdb.set_trace()
+       variance = sqr.sum(axis=0)/N - msquared
+       stdev_inv = 1/np.sqrt(variance)
+       diagstdev_inv = scipy.sparse.diags(np.array(stdev_inv)[0],0)
+       y_normalized = y_normalized.multiply(y_mask * diagstdev_inv)
+    #import ipdb; ipdb.set_trace()
+    #y_regr -= m                                                                                                                                                            
+    #y_regr /= stdev
+#    import ipdb; ipdb.set_trace()
+    return y_normalized, m, variance 
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -368,8 +400,8 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
     yc_hat_all, yr_hat_all = net(X)
     if normalize_inv is not None:
-       yr_hat_all.data *= normalize_inv["std"]
-       yr_hat_all.data += normalize_inv["mean"]
+       #inverse normalization
+       yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"])
     out = {}
     out["yc_hat_all"] = yc_hat_all
     out["yr_hat_all"] = yr_hat_all
@@ -762,8 +794,9 @@ def save_results(filename, conf, validation, training, stats=None):
     out["conf"] = conf.__dict__
     if stats is not None:
         out["stats"] = {}
-        for key in ["mean", "std"]:
-            out["stats"][key] = stats[key]
+        for key in ["mean", "var"]:
+            #import ipdb; ipdb.set_trace()
+            out["stats"][key] = np.array(stats[key])[0].tolist()
     if validation is not None:
         out["validation"] = {}
         for key in ["classification", "classification_agg", "regression", "regression_agg"]:

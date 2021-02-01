@@ -170,6 +170,7 @@ if args.normalize_regression == 1:
    normalize_inv={}
    normalize_inv["mean"] = mean_save
    normalize_inv["var"]  = var_save
+normalize_inv = None #setting to None for performance reasons
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])

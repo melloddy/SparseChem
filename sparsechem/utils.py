@@ -32,7 +32,7 @@ class Nothing(object):
     def __repr__(self):
         return "Nothing"
 
-def inverse_normalization(yr_hat_all, mean, variance):
+def inverse_normalization(yr_hat_all, mean, variance, dev="cpu"):
    # y_mask = yr_hat_all.copy()
    # y_mask.data = np.ones_like(y_mask.data)
     mean = torch.tensor(np.array(mean)[0]).unsqueeze(dim=0)
@@ -46,9 +46,9 @@ def inverse_normalization(yr_hat_all, mean, variance):
     stdev_stacked = torch.tensor(np.array(stdev)[0]).unsqueeze(dim=0)
     for i in range(yr_hat_all.shape[0]-1):
         stdev_stacked = torch.cat((stdev_stacked, stdev), dim=0)
-    y_inv_norm = yr_hat_all * stdev_stacked
+    y_inv_norm = yr_hat_all * stdev_stacked.to(dev)
     #import ipdb; ipdb.set_trace()
-    y_inv_norm = y_inv_norm + mean_stacked
+    y_inv_norm = y_inv_norm + mean_stacked.to(dev)
 
    # diagstdev = scipy.sparse.diags(np.array(stdev)[0],0)
    # y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
@@ -401,7 +401,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     yc_hat_all, yr_hat_all = net(X)
     if normalize_inv is not None:
        #inverse normalization
-       yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"]).to(dev)
+       yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"], dev).to(dev)
     out = {}
     out["yc_hat_all"] = yc_hat_all
     out["yr_hat_all"] = yr_hat_all

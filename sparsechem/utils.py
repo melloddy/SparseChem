@@ -401,7 +401,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     yc_hat_all, yr_hat_all = net(X)
     if normalize_inv is not None:
        #inverse normalization
-       yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"])
+       yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"]).to(dev)
     out = {}
     out["yc_hat_all"] = yc_hat_all
     out["yr_hat_all"] = yr_hat_all

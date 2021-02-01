@@ -47,8 +47,12 @@ class SparseFFN_combined(nn.Module):
     return self.class_output_size is not None
   def forward(self, input):
     shared_output = self.shared_trunk(input)
-    local_output  = self.local_trunk(input)
-    combined = torch.cat((shared_output,local_output), dim=1)
+    if self.local_trunk is not None:
+        local_output  = self.local_trunk(input)
+        combined = torch.cat((shared_output,local_output), dim=1)
+    else:
+        combined = shared_output
+
     out = self.head(combined)
     if self.class_output_size is None:
        return out
@@ -70,7 +74,7 @@ parser.add_argument("--fold_te", help="Test fold number (removed from dataset)",
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
 parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
-parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
+parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=None, type=int)
 parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes", default=None, type=int)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
@@ -112,9 +116,14 @@ vprint(args)
 if args.run_name is not None:
     name = args.run_name
 else:
-    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
-    name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
-    name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    if args.hidden_sizes is not None:
+       name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+       name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
+       name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    else:
+        name  = f"sc_{args.prefix}_h_nohidden_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+        name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
+        name += f"_fva{args.fold_va}_fte{args.fold_te}"
 vprint(f"Run name is '{name}'.")
 
 conf = sc.load_results(args.conf, two_heads=True)["conf"]
@@ -269,11 +278,16 @@ args.class_output_size = dataset_tr.class_output_size
 args.regr_output_size  = dataset_tr.regr_output_size
 
 dev  = torch.device(args.dev)
-newhead    = sc.LastNet(args, conf.hidden_sizes[-1])
-local_trunk = nn.Sequential(
+if args.hidden_sizes is not None:
+   newhead    = sc.LastNet(args, conf.hidden_sizes[-1])
+   local_trunk = nn.Sequential(
                 sc.SparseInputNet(args),
                 sc.MiddleNet(args)
              )
+else:
+    args.hidden_sizes = conf.hidden_sizes
+    newhead = sc.LastNet(args)
+    local_trunk = None
 net = SparseFFN_combined(args, fed_trunk, local_trunk, newhead).to(dev)
 
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")

@@ -60,8 +60,14 @@ def normalize_regr(y_regr, mean=None, std=None):
        m     = mean
        stdev = std
     else:
-       m = y_regr.mean(axis=0)
+       tot = np.array(y_regr.sum(axis=0).squeeze())[0]
+
+       #m = y_regr.mean(axis=0)
+       #import ipdb; ipdb.set_trace()
+#       np.mean(y_regr.todense()
        N = y_regr.getnnz(axis=0)
+       m = tot/N
+#       import ipdb; ipdb.set_trace()
        diagm = scipy.sparse.diags(np.array(m)[0], 0)
        y_mask = y_regr.copy()
        y_mask.data = np.ones_like(y_mask.data)

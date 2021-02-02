@@ -68,7 +68,8 @@ def normalize_regr(y_regr, mean=None, std=None):
        N = y_regr.getnnz(axis=0)
        m = tot/N
 #       import ipdb; ipdb.set_trace()
-       diagm = scipy.sparse.diags(np.array(m)[0], 0)
+      # diagm = scipy.sparse.diags(np.array(m)[0], 0)
+       diagm = scipy.sparse.diags(m, 0)
        y_mask = y_regr.copy()
        y_mask.data = np.ones_like(y_mask.data)
        y_normalized = y_regr - y_mask * diagm

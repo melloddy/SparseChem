@@ -195,6 +195,36 @@ class SparseFFN(torch.nn.Module):
         ## splitting to class and regression
         return out[:, :self.class_output_size], out[:, self.class_output_size:]
 
+class SparseFFN_combined(nn.Module):
+  def __init__(self, conf, shared_trunk, local_trunk, head):
+    super().__init__()
+    if hasattr(conf, "class_output_size"):
+       self.class_output_size = conf.class_output_size
+       self.regr_output_size  = conf.regr_output_size
+    else:
+       self.class_output_size = None
+       self.regr_output_size  = None
+    self.shared_trunk = shared_trunk
+    self.local_trunk  = local_trunk
+    self.head = head
+
+  @property
+  def has_2heads(self):
+    return self.class_output_size is not None
+  def forward(self, input):
+    shared_output = self.shared_trunk(input)
+    if self.local_trunk is not None:
+        local_output  = self.local_trunk(input)
+        combined = torch.cat((shared_output,local_output), dim=1)
+    else:
+        combined = shared_output
+
+    out = self.head(combined)
+    if self.class_output_size is None:
+       return out
+     ## splitting to class and regression
+    return out[:, :self.class_output_size], out[:, self.class_output_size:]
+
 def censored_mse_loss(input, target, censor, censored_enabled=True):
     """
     Computes for each value the censored MSE loss.

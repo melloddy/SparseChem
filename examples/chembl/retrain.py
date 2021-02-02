@@ -29,37 +29,6 @@ def unstack_SparseFFN_model(model):
     return head, trunk
 
 
-class SparseFFN_combined(nn.Module):
-  def __init__(self, conf, shared_trunk, local_trunk, head):
-    super().__init__()
-    if hasattr(conf, "class_output_size"):
-       self.class_output_size = conf.class_output_size
-       self.regr_output_size  = conf.regr_output_size
-    else:
-       self.class_output_size = None
-       self.regr_output_size  = None
-    self.shared_trunk = shared_trunk
-    self.local_trunk  = local_trunk
-    self.head = head
-
-  @property
-  def has_2heads(self):
-    return self.class_output_size is not None
-  def forward(self, input):
-    shared_output = self.shared_trunk(input)
-    if self.local_trunk is not None:
-        local_output  = self.local_trunk(input)
-        combined = torch.cat((shared_output,local_output), dim=1)
-    else:
-        combined = shared_output
-
-    out = self.head(combined)
-    if self.class_output_size is None:
-       return out
-     ## splitting to class and regression
-    return out[:, :self.class_output_size], out[:, self.class_output_size:]
-
-
 parser = argparse.ArgumentParser(description="Using trained fixed trunk model and retrain with local trunk and new head.")
 parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, default=None)
 parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market, .npy or .npz)", type=str, default=None)
@@ -288,7 +257,7 @@ else:
     args.hidden_sizes = conf.hidden_sizes
     newhead = sc.LastNet(args)
     local_trunk = None
-net = SparseFFN_combined(args, fed_trunk, local_trunk, newhead).to(dev)
+net = sc.SparseFFN_combined(args, fed_trunk, local_trunk, newhead).to(dev)
 
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")
 loss_regr  = sc.censored_mse_loss

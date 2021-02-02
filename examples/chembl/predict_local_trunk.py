@@ -33,32 +33,6 @@ def unstack_SparseFFN_model(model):
     )
     return head, trunk
 
-class SparseFFN_combined(nn.Module):
-  def __init__(self, conf, shared_trunk, local_trunk, head):
-    super().__init__()
-    if hasattr(conf, "class_output_size"):
-       self.class_output_size = conf.class_output_size
-       self.regr_output_size  = conf.regr_output_size
-    else:
-       self.class_output_size = None
-       self.regr_output_size  = None
-    self.shared_trunk = shared_trunk
-    self.local_trunk  = local_trunk
-    self.head = head
-
-  @property
-  def has_2heads(self):
-    return self.class_output_size is not None
-  def forward(self, input):
-    shared_output = self.shared_trunk(input)
-    local_output  = self.local_trunk(input)
-    combined = torch.cat((shared_output,local_output), dim=1)
-    out = self.head(combined)
-    if self.class_output_size is None:
-       return out
-     ## splitting to class and regression
-    return out[:, :self.class_output_size], out[:, self.class_output_size:]
-
 parser = argparse.ArgumentParser(description="Using trained model to make predictions.")
 parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, required=True)
 parser.add_argument("--y_class", "--y", "--y_classification", help="Sparse pattern file for classification, optional. If provided returns predictions for given locations only (matrix market, .npy or .npz)", type=str, default=None)
@@ -72,6 +46,7 @@ parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, requir
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
 parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
 parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluation", type=int, default=0)
+parser.add_argument("--disable_localtrunk", help="If set to 1 disables dropout localtrunk", type=int, default=0)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
 
 args = parser.parse_args()
@@ -80,7 +55,7 @@ print(args)
 
 conf = sc.load_results(args.conf, two_heads=True)["conf"]
 fedconf = sc.load_results(args.fedconf, two_heads=True)["conf"]
-
+setattr(fedconf, "last_hidden_sizes", [])
 x = sc.load_sparse(args.x)
 x = sc.fold_transform_inputs(x, folding_size=conf.fold_inputs, transform=conf.input_transform)
 
@@ -102,16 +77,21 @@ else:
         assert args.predict_fold is None, "If --predict_fold is given please also specify --folding."
 
 dev  = torch.device(args.dev)
-
+#import ipdb; ipdb.set_trace()
 fednet = sc.SparseFFN(fedconf).to(dev)
 fed_head, fed_trunk = unstack_SparseFFN_model(fednet)
-newhead    = sc.LastNet(conf, fedconf.hidden_sizes[-1])
-local_trunk = nn.Sequential(
+if args.disable_localtrunk == 0:
+   newhead    = sc.LastNet(conf, fedconf.hidden_sizes[-1])
+   local_trunk = nn.Sequential(
                 sc.SparseInputNet(conf),
                 sc.MiddleNet(conf)
              )
-net = SparseFFN_combined(conf, fed_trunk, local_trunk, newhead).to(dev)
-
+else:
+    conf.hidden_sizes = fedconf.hidden_sizes
+    newhead = sc.LastNet(conf)
+    local_trunk = None
+net = sc.SparseFFN_combined(conf, fed_trunk, local_trunk, newhead).to(dev)
+#import ipdb; ipdb.set_trace()
 state_dict = torch.load(args.model, map_location=torch.device(dev))
 
 

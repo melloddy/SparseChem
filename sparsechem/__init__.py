@@ -1,5 +1,5 @@
 # Copyright (c) 2020 KU Leuven
-from .models import SparseLinear, SparseInputNet, SparseFFN, LastNet, MiddleNet, sparse_split2
+from .models import SparseLinear, SparseInputNet, SparseFFN, SparseFFN_combined, LastNet, MiddleNet, sparse_split2
 from .models import censored_mse_loss, censored_mae_loss
 from .models import censored_mse_loss_numpy, censored_mae_loss_numpy
 from .data import SparseDataset, sparse_collate

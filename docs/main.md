@@ -1,8 +1,3 @@
-# Introduction
-
-This package provide **fast** and **accurate** machine learning models for biochemical applications.
-Especially, we support very high-dimensional models with sparse inputs, *e.g.*, millions of features and millions of compounds.
-
 # Installation
 
 SparseChem depends on **pytorch**, which you have to install first, other dependencies will be installed with the package:
@@ -209,6 +204,7 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 * __--internal_batch_max__: Maximum size of the internal batch (int)
 * __--normalize_loss__: Normalization constant to divide the loss (int, default=None,  uses batch size)
 * __--hidden_sizes__: Hidden sizes (int) (default: [])
+* __--last_hidden_sizes__: Hidden sizes in the head (int) (default: [])
 * __--middle_dropout__: Dropout for layers before the last (float, default=0.0)
 * __--last_dropout__: Last dropout (float, default=0.2)
 * __--weight_decay__: Weight decay (float, default=0.0)

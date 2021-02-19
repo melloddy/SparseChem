@@ -126,7 +126,12 @@ class MiddleNet(torch.nn.Module):
 class LastNet(torch.nn.Module):
     def __init__(self, conf, extra_input_size=0):
         super().__init__()
-        if len(conf.last_hidden_sizes) > 0:
+        if conf.last_hidden_sizes is None:
+            last_hidden_sizes = []
+        else:
+            last_hidden_sizes = conf.last_hidden_sizes
+
+        if len(last_hidden_sizes) > 0:
            self.net = nn.Sequential()
            output_size_initial = conf.last_hidden_sizes[0]
            self.net.add_module(f"initial_layer", nn.Sequential(

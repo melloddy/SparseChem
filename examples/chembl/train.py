@@ -16,6 +16,9 @@ from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
+import multiprocessing
+multiprocessing.set_start_method('fork', force=True)
+
 
 parser = argparse.ArgumentParser(description="Training a multi-task model.")
 parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, default=None)

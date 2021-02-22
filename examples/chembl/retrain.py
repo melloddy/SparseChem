@@ -1,26 +1,35 @@
-# Copyright (c) 2020 KU Leuven
+# Copyright (c) 2021 KU Leuven
 import sparsechem as sc
 import scipy.io
-import scipy.sparse
 import numpy as np
 import pandas as pd
 import torch
-import argparse
-import os
+from torch import nn
 import sys
-import os.path
+import os
+import argparse
 import time
-import json
-import functools
+from scipy.sparse import csr_matrix
+from torch.utils.data import DataLoader
+from scipy.special import expit
+from collections import OrderedDict
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
-import multiprocessing
-multiprocessing.set_start_method('fork', force=True)
+
+def unstack_SparseFFN_model(model):
+    sparse_input = model.net[0]
+    middle_net   = model.net[1]
+    head         = model.net[2]
+    trunk = nn.Sequential(
+            sparse_input,
+            middle_net,
+    )
+    return head, trunk
 
 
-parser = argparse.ArgumentParser(description="Training a multi-task model.")
+parser = argparse.ArgumentParser(description="Using trained fixed trunk model and retrain with local trunk and new head.")
 parser.add_argument("--x", help="Descriptor file (matrix market, .npy or .npz)", type=str, default=None)
 parser.add_argument("--y_class", "--y", "--y_classification", help="Activity file (matrix market, .npy or .npz)", type=str, default=None)
 parser.add_argument("--y_regr", "--y_regression", help="Activity file (matrix market, .npy or .npz)", type=str, default=None)
@@ -34,7 +43,7 @@ parser.add_argument("--fold_te", help="Test fold number (removed from dataset)",
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
 parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
-parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
+parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=None, type=int)
 parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes in the head", default=None, type=int)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
@@ -60,9 +69,13 @@ parser.add_argument("--save_model", help="Set this to 0 if the model should not 
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
+parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
+parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
+parser.add_argument("--disable_fed_dropout", help="Set this to 1 to disable the dropout in the shared trunk", type=int, default=0)
 
 args = parser.parse_args()
-
+if args.last_hidden_sizes is None:
+   args.last_hidden_sizes = []
 def vprint(s=""):
     if args.verbose:
         print(s)
@@ -72,10 +85,51 @@ vprint(args)
 if args.run_name is not None:
     name = args.run_name
 else:
-    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
-    name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
-    name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    if args.hidden_sizes is not None:
+       name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+       name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
+       name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    else:
+        name  = f"sc_{args.prefix}_h_nohidden_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+        name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
+        name += f"_fva{args.fold_va}_fte{args.fold_te}"
 vprint(f"Run name is '{name}'.")
+
+conf = sc.load_results(args.conf, two_heads=True)["conf"]
+setattr(conf, "last_hidden_sizes", [])
+dev = args.dev
+net = sc.SparseFFN(conf).to(dev)
+state_dict = torch.load(args.model, map_location=torch.device(dev))
+
+if conf.model_type == "federated":
+    state_dict_new = OrderedDict()
+    state_dict_new["net.0.net_freq.weight"] = state_dict["0.0.net_freq.weight"]
+    state_dict_new["net.0.net_freq.bias"]   = state_dict["0.0.net_freq.bias"]
+    state_dict_new["net.2.net.2.weight"]    = state_dict["1.net.2.weight"]
+    state_dict_new["net.2.net.2.bias"]      = state_dict["1.net.2.bias"]
+    state_dict = state_dict_new
+
+net.load_state_dict(state_dict)
+print(f"Model weights:   '{args.model}'")
+print(f"Model config:    '{args.conf}'.")
+
+print(net)
+#Freeze whole federated model
+#feezing code sth like this ...
+#net.net[0].weight.requires_grad=False
+#net.net[0].bias.requires_grad=False
+#net.net[1].weight.requires_grad=False
+#net.net[1].bias.requires_grad=False
+#net.net[2].weight.requires_grad=False
+#net.net[2].bias.requires_grad=False
+#Now split in head and trunk
+fed_head, fed_trunk = unstack_SparseFFN_model(net)
+for param in fed_trunk.parameters():
+    param.requires_grad = False
+
+if args.disable_fed_dropout == 1:
+   fed_trunk.eval()
+   print("disabling dropout for shared trunk ...")
 
 if args.save_board:
     tb_name = os.path.join(args.output_dir, "boards", name)
@@ -193,7 +247,18 @@ args.class_output_size = dataset_tr.class_output_size
 args.regr_output_size  = dataset_tr.regr_output_size
 
 dev  = torch.device(args.dev)
-net  = sc.SparseFFN(args).to(dev)
+if args.hidden_sizes is not None:
+   newhead    = sc.LastNet(args, conf.hidden_sizes[-1])
+   local_trunk = nn.Sequential(
+                sc.SparseInputNet(args),
+                sc.MiddleNet(args)
+             )
+else:
+    args.hidden_sizes = conf.hidden_sizes
+    newhead = sc.LastNet(args)
+    local_trunk = None
+net = sc.SparseFFN_combined(args, fed_trunk, local_trunk, newhead).to(dev)
+
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")
 loss_regr  = sc.censored_mse_loss
 if not args.censored_loss:
@@ -282,3 +347,6 @@ if results_tr is not None:
 sc.save_results(out_file, args, validation=results_va, training=results_tr)
 
 vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  import sparsechem as sc\n  res = sc.load_results('{out_file}')")
+
+
+

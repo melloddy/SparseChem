@@ -34,13 +34,16 @@ parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, requir
 parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
 parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
 parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluation", type=int, default=0)
+parser.add_argument("--inverse_normalization", help="If set to 1 enables inverse normalization given means and variances from config file", type=int, default=0)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
 
 args = parser.parse_args()
 
 print(args)
 
-conf = sc.load_results(args.conf, two_heads=True)["conf"]
+results_loaded = sc.load_results(args.conf, two_heads=True)
+conf  = results_loaded["conf"]
+stats = results_loaded["stats"]
 
 x = sc.load_sparse(args.x)
 x = sc.fold_transform_inputs(x, folding_size=conf.fold_inputs, transform=conf.input_transform)
@@ -102,7 +105,8 @@ else:
         class_out, regr_out = sc.predict(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
     else:
         class_out, regr_out = sc.predict_sparse(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
-
+        if args.inverse_normalization == 1:
+           regr_out = sc.inverse_normalization(regr_out, mean=np.array(stats["mean"]), variance=np.array(stats["var"]), array=True)
     if net.class_output_size > 0:
         np.save(f"{args.outprefix}-class.npy", class_out)
         print(f"Saved prediction matrix (numpy) for classification to '{args.outprefix}-class.npy'.")

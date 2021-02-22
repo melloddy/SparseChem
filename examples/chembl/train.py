@@ -33,6 +33,7 @@ parser.add_argument("--internal_batch_max", help="Maximum size of the internal b
 parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
 parser.add_argument("--normalize_regression", help="Set this to 1 if the regression tasks should be normalized", type=int, default=0)
 parser.add_argument("--normalize_regr_va", help="Set this to 1 if the regression tasks in validation fold should be normalized together with training folds", type=int, default=0)
+parser.add_argument("--inverse_normalization", help="Set this to 1 if the regression tasks in validation fold should be inverse normalized at validation time", type=int, default=0)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
 parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
@@ -154,11 +155,9 @@ if args.fold_te is not None and args.fold_te >= 0:
     y_censor = y_censor[keep]
     folding = folding[keep]
 
-
+normalize_inv = None
 if args.normalize_regression == 1 and args.normalize_regr_va == 1:
-   print(f"checking y_regr: {y_regr.shape}")
    y_regr, mean_save, var_save = sc.normalize_regr(y_regr)
-   print(f"normalizing including validation data: {y_regr.shape}")
 fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]
 idx_va  = np.where(folding == fold_va)[0]
@@ -170,13 +169,12 @@ y_regr_va  = y_regr[idx_va]
 y_censor_tr = y_censor[idx_tr]
 y_censor_va = y_censor[idx_va]
 
-normalize_inv = None
 if args.normalize_regression == 1 and args.normalize_regr_va == 0:
    y_regr_tr, mean_save, var_save = sc.normalize_regr(y_regr_tr) 
-   normalize_inv={}
-   normalize_inv["mean"] = mean_save
-   normalize_inv["var"]  = var_save
-normalize_inv = None #setting to None for performance reasons
+   if args.inverse_normalization == 1:
+      normalize_inv = {}
+      normalize_inv["mean"] = mean_save
+      normalize_inv["var"]  = var_save
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
@@ -293,7 +291,7 @@ stats=None
 if args.normalize_regression == 1 :
    stats={}
    stats["mean"] = mean_save
-   stats["var"]  = var_save
+   stats["var"]  = np.array(var_save)[0]
 sc.save_results(out_file, args, validation=results_va, training=results_tr, stats=stats)
 
 vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  import sparsechem as sc\n  res = sc.load_results('{out_file}')")

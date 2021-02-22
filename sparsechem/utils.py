@@ -32,60 +32,42 @@ class Nothing(object):
     def __repr__(self):
         return "Nothing"
 
-def inverse_normalization(yr_hat_all, mean, variance, dev="cpu"):
-   # y_mask = yr_hat_all.copy()
-   # y_mask.data = np.ones_like(y_mask.data)
-    mean = torch.tensor(np.array(mean)[0]).unsqueeze(dim=0)
-    mean_stacked = torch.tensor(np.array(mean)[0]).unsqueeze(dim=0)
-    for i in range(yr_hat_all.shape[0]-1):
-        mean_stacked = torch.cat((mean_stacked, mean), dim=0)
-    #import ipdb; ipdb.set_trace()
-   # diagm = scipy.sparse.diags(np.array(mean)[0], 0)
-    stdev = np.sqrt(variance)
-    stdev = torch.tensor(np.array(stdev)[0]).unsqueeze(dim=0)
-    stdev_stacked = torch.tensor(np.array(stdev)[0]).unsqueeze(dim=0)
-    for i in range(yr_hat_all.shape[0]-1):
-        stdev_stacked = torch.cat((stdev_stacked, stdev), dim=0)
-    y_inv_norm = yr_hat_all * stdev_stacked.to(dev)
-    #import ipdb; ipdb.set_trace()
-    y_inv_norm = y_inv_norm + mean_stacked.to(dev)
-
-   # diagstdev = scipy.sparse.diags(np.array(stdev)[0],0)
-   # y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
-   # y_inv_norm = y_inv_norm + y_mask * diagm
+def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
+    if array==False:
+        stdev = np.sqrt(variance)
+        diagstdev = scipy.sparse.diags(np.array(stdev)[0],0)
+        diag = torch.from_numpy(diagstdev.todense())
+        y_inv_norm = torch.matmul(yr_hat_all, diag.to(torch.float32).to(dev))
+        diagm = scipy.sparse.diags(mean, 0)
+        y_mask = np.ones(yr_hat_all.shape)
+        y_inv_norm = y_inv_norm + torch.from_numpy(y_mask * diagm).to(torch.float32).to(dev)
+    else:
+        y_mask = yr_hat_all.copy()
+        y_mask.data = np.ones_like(y_mask.data)
+        stdev = np.sqrt(variance)
+        diagstdev = scipy.sparse.diags(stdev,0)
+        y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
+        diagm = scipy.sparse.diags(mean, 0)
+        y_inv_norm = y_inv_norm + y_mask * diagm
     return y_inv_norm
 
 def normalize_regr(y_regr, mean=None, std=None):
-    if mean is not None:
-       m     = mean
-       stdev = std
-    else:
-       tot = np.array(y_regr.sum(axis=0).squeeze())[0]
+    tot = np.array(y_regr.sum(axis=0).squeeze())[0]
 
-       #m = y_regr.mean(axis=0)
-       #import ipdb; ipdb.set_trace()
-#       np.mean(y_regr.todense()
-       N = y_regr.getnnz(axis=0)
-       m = tot/N
-#       import ipdb; ipdb.set_trace()
-      # diagm = scipy.sparse.diags(np.array(m)[0], 0)
-       diagm = scipy.sparse.diags(m, 0)
-       y_mask = y_regr.copy()
-       y_mask.data = np.ones_like(y_mask.data)
-       y_normalized = y_regr - y_mask * diagm
-       sqr = y_regr.copy()
-       sqr.data **= 2
-       msquared = np.square(m)
-      # import ipdb; ipdb.set_trace()
-       variance = sqr.sum(axis=0)/N - msquared
-       stdev_inv = 1/np.sqrt(variance)
-       diagstdev_inv = scipy.sparse.diags(np.array(stdev_inv)[0],0)
-       y_normalized = y_normalized.multiply(y_mask * diagstdev_inv)
-    #import ipdb; ipdb.set_trace()
-    #y_regr -= m                                                                                                                                                            
-    #y_regr /= stdev
-#    import ipdb; ipdb.set_trace()
-    return y_normalized, m, variance 
+    N = y_regr.getnnz(axis=0)
+    m = tot/N
+    diagm = scipy.sparse.diags(m, 0)
+    y_mask = y_regr.copy()
+    y_mask.data = np.ones_like(y_mask.data)
+    y_normalized = y_regr - y_mask * diagm
+    sqr = y_regr.copy()
+    sqr.data **= 2
+    msquared = np.square(m)
+    variance = sqr.sum(axis=0)/N - msquared
+    stdev_inv = 1/np.sqrt(variance)
+    diagstdev_inv = scipy.sparse.diags(np.array(stdev_inv)[0],0)
+    y_normalized = y_normalized.multiply(y_mask * diagstdev_inv)
+    return y_normalized, m, variance
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -803,7 +785,7 @@ def save_results(filename, conf, validation, training, stats=None):
         out["stats"] = {}
         for key in ["mean", "var"]:
             #import ipdb; ipdb.set_trace()
-            out["stats"][key] = np.array(stats[key])[0].tolist()
+            out["stats"][key] = stats[key].tolist()
     if validation is not None:
         out["validation"] = {}
         for key in ["classification", "classification_agg", "regression", "regression_agg"]:

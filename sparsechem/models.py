@@ -124,15 +124,41 @@ class MiddleNet(torch.nn.Module):
         return self.net(H)
 
 class LastNet(torch.nn.Module):
-    def __init__(self, conf):
+    def __init__(self, conf, extra_input_size=0):
         super().__init__()
-        self.non_linearity = conf.last_non_linearity
-        non_linearity = non_linearities[conf.last_non_linearity]
-        self.net = nn.Sequential(
-            non_linearity(),
-            nn.Dropout(conf.last_dropout),
-            nn.Linear(conf.hidden_sizes[-1], conf.output_size),
-        )
+        if conf.last_hidden_sizes is None:
+            last_hidden_sizes = []
+        else:
+            last_hidden_sizes = conf.last_hidden_sizes
+
+        if len(last_hidden_sizes) > 0:
+           self.net = nn.Sequential()
+           output_size_initial = conf.last_hidden_sizes[0]
+           self.net.add_module(f"initial_layer", nn.Sequential(
+               non_linearities[conf.last_non_linearity](),
+               nn.Dropout(conf.last_dropout),
+               nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size_initial),
+           ))
+           for i in range(len(conf.last_hidden_sizes) - 1):
+               self.net.add_module(f"layer_{i}", nn.Sequential(
+                   non_linearities[conf.last_non_linearity](),
+                   nn.Dropout(conf.last_dropout),
+                   nn.Linear(conf.last_hidden_sizes[i], conf.last_hidden_sizes[i+1], bias=True),
+               ))
+           self.net.add_module(f"last_layer", nn.Sequential(
+                non_linearities[conf.last_non_linearity](),
+                nn.Dropout(conf.last_dropout),
+                nn.Linear(conf.last_hidden_sizes[-1], conf.output_size),
+            ))
+        else:
+          self.non_linearity = conf.last_non_linearity
+          non_linearity = non_linearities[conf.last_non_linearity]
+          self.net = nn.Sequential(
+              non_linearity(),
+              nn.Dropout(conf.last_dropout),
+              nn.Linear(conf.hidden_sizes[-1]+extra_input_size, conf.output_size),
+          )
+
         self.apply(self.init_weights)
 
     def init_weights(self, m):
@@ -173,6 +199,36 @@ class SparseFFN(torch.nn.Module):
             return out
         ## splitting to class and regression
         return out[:, :self.class_output_size], out[:, self.class_output_size:]
+
+class SparseFFN_combined(nn.Module):
+  def __init__(self, conf, shared_trunk, local_trunk, head):
+    super().__init__()
+    if hasattr(conf, "class_output_size"):
+       self.class_output_size = conf.class_output_size
+       self.regr_output_size  = conf.regr_output_size
+    else:
+       self.class_output_size = None
+       self.regr_output_size  = None
+    self.shared_trunk = shared_trunk
+    self.local_trunk  = local_trunk
+    self.head = head
+
+  @property
+  def has_2heads(self):
+    return self.class_output_size is not None
+  def forward(self, input):
+    shared_output = self.shared_trunk(input)
+    if self.local_trunk is not None:
+        local_output  = self.local_trunk(input)
+        combined = torch.cat((shared_output,local_output), dim=1)
+    else:
+        combined = shared_output
+
+    out = self.head(combined)
+    if self.class_output_size is None:
+       return out
+     ## splitting to class and regression
+    return out[:, :self.class_output_size], out[:, self.class_output_size:]
 
 def censored_mse_loss(input, target, censor, censored_enabled=True):
     """

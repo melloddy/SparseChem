@@ -34,6 +34,9 @@ parser.add_argument("--fold_te", help="Test fold number (removed from dataset)",
 parser.add_argument("--batch_ratio", help="Batch ratio", type=float, default=0.02)
 parser.add_argument("--internal_batch_max", help="Maximum size of the internal batch", type=int, default=None)
 parser.add_argument("--normalize_loss", help="Normalization constant to divide the loss (default uses batch size)", type=float, default=None)
+parser.add_argument("--normalize_regression", help="Set this to 1 if the regression tasks should be normalized", type=int, default=0)
+parser.add_argument("--normalize_regr_va", help="Set this to 1 if the regression tasks in validation fold should be normalized together with training folds", type=int, default=0)
+parser.add_argument("--inverse_normalization", help="Set this to 1 if the regression tasks in validation fold should be inverse normalized at validation time", type=int, default=0)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes in the head", default=None, type=int)
 parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
@@ -156,6 +159,9 @@ if args.fold_te is not None and args.fold_te >= 0:
     y_censor = y_censor[keep]
     folding = folding[keep]
 
+normalize_inv = None
+if args.normalize_regression == 1 and args.normalize_regr_va == 1:
+   y_regr, mean_save, var_save = sc.normalize_regr(y_regr)
 fold_va = args.fold_va
 idx_tr  = np.where(folding != fold_va)[0]
 idx_va  = np.where(folding == fold_va)[0]
@@ -167,6 +173,12 @@ y_regr_va  = y_regr[idx_va]
 y_censor_tr = y_censor[idx_tr]
 y_censor_va = y_censor[idx_va]
 
+if args.normalize_regression == 1 and args.normalize_regr_va == 0:
+   y_regr_tr, mean_save, var_save = sc.normalize_regr(y_regr_tr) 
+   if args.inverse_normalization == 1:
+      normalize_inv = {}
+      normalize_inv["mean"] = mean_save
+      normalize_inv["var"]  = var_save
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
@@ -232,7 +244,7 @@ for epoch in range(args.epochs):
     last_round = epoch == args.epochs - 1
 
     if eval_round or last_round:
-        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)
+        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv)
         for key, val in results_va["classification_agg"].items():
             writer.add_scalar(key+"/va", val, epoch)
         for key, val in results_va["regression_agg"].items():
@@ -279,6 +291,11 @@ if results_tr is not None:
     results_tr["classification"]["num_neg"] = num_neg - num_neg_va
     results_tr["regression"]["num_samples"] = num_regr - num_regr_va
 
-sc.save_results(out_file, args, validation=results_va, training=results_tr)
+stats=None
+if args.normalize_regression == 1 :
+   stats={}
+   stats["mean"] = mean_save
+   stats["var"]  = np.array(var_save)[0]
+sc.save_results(out_file, args, validation=results_va, training=results_tr, stats=stats)
 
 vprint(f"Saved config and results into '{out_file}'.\nYou can load the results by:\n  import sparsechem as sc\n  res = sc.load_results('{out_file}')")

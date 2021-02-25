@@ -10,6 +10,7 @@ import scipy.special
 import types
 import json
 import warnings
+import math
 import torch.nn.functional as F
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
@@ -30,6 +31,43 @@ class Nothing(object):
         return Nothing()
     def __repr__(self):
         return "Nothing"
+
+def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
+    if array==False:
+        stdev = np.sqrt(variance)
+        diagstdev = scipy.sparse.diags(np.array(stdev)[0],0)
+        diag = torch.from_numpy(diagstdev.todense())
+        y_inv_norm = torch.matmul(yr_hat_all, diag.to(torch.float32).to(dev))
+        diagm = scipy.sparse.diags(mean, 0)
+        y_mask = np.ones(yr_hat_all.shape)
+        y_inv_norm = y_inv_norm + torch.from_numpy(y_mask * diagm).to(torch.float32).to(dev)
+    else:
+        y_mask = yr_hat_all.copy()
+        y_mask.data = np.ones_like(y_mask.data)
+        stdev = np.sqrt(variance)
+        diagstdev = scipy.sparse.diags(stdev,0)
+        y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
+        diagm = scipy.sparse.diags(mean, 0)
+        y_inv_norm = y_inv_norm + y_mask * diagm
+    return y_inv_norm
+
+def normalize_regr(y_regr, mean=None, std=None):
+    tot = np.array(y_regr.sum(axis=0).squeeze())[0]
+
+    N = y_regr.getnnz(axis=0)
+    m = tot/N
+    diagm = scipy.sparse.diags(m, 0)
+    y_mask = y_regr.copy()
+    y_mask.data = np.ones_like(y_mask.data)
+    y_normalized = y_regr - y_mask * diagm
+    sqr = y_regr.copy()
+    sqr.data **= 2
+    msquared = np.square(m)
+    variance = sqr.sum(axis=0)/N - msquared
+    stdev_inv = 1/np.sqrt(variance)
+    diagstdev_inv = scipy.sparse.diags(np.array(stdev_inv)[0],0)
+    y_normalized = y_normalized.multiply(y_mask * diagstdev_inv)
+    return y_normalized, m, variance
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -342,7 +380,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu"):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
@@ -350,7 +388,9 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         size = [b["batch_size"], input_size]).to(dev, non_blocking=True)
 
     yc_hat_all, yr_hat_all = net(X)
-
+    if normalize_inv is not None:
+       #inverse normalization
+       yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"], dev).to(dev)
     out = {}
     out["yc_hat_all"] = yc_hat_all
     out["yr_hat_all"] = yr_hat_all
@@ -431,7 +471,7 @@ def aggregate_results(df, weights):
     df2 = df.where(pd.isnull, 1) * weights[:,None]
     return (df2.multiply(1.0 / df2.sum(axis=0), axis=1) * df).sum(axis=0)
 
-def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True):
+def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None):
     class_w = tasks_class.aggregation_weight
     regr_w  = tasks_regr.aggregation_weight
 
@@ -454,7 +494,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
-            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev)
+            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev, normalize_inv=normalize_inv)
             loss_class_sum += fwd["yc_loss"]
             loss_regr_sum  += fwd["yr_loss"]
             loss_class_weights += fwd["yc_weights"]
@@ -737,11 +777,15 @@ def load_task_weights(filename, y, label):
 
     return res
 
-def save_results(filename, conf, validation, training):
+def save_results(filename, conf, validation, training, stats=None):
     """Saves conf and results into json file. Validation and training can be None."""
     out = {}
     out["conf"] = conf.__dict__
-
+    if stats is not None:
+        out["stats"] = {}
+        for key in ["mean", "var"]:
+            #import ipdb; ipdb.set_trace()
+            out["stats"][key] = stats[key].tolist()
     if validation is not None:
         out["validation"] = {}
         for key in ["classification", "classification_agg", "regression", "regression_agg"]:

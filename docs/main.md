@@ -203,6 +203,7 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 * __--batch_ratio__: Batch ratio (float, default=0.02)
 * __--internal_batch_max__: Maximum size of the internal batch (int)
 * __--normalize_loss__: Normalization constant to divide the loss (int, default=None,  uses batch size)
+* __--normalize_regression__: Set this to 1 if the regression tasks should be normalized
 * __--hidden_sizes__: Hidden sizes (int) (default: [])
 * __--last_hidden_sizes__: Hidden sizes in the head (int) (default: [])
 * __--middle_dropout__: Dropout for layers before the last (float, default=0.0)

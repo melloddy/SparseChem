@@ -43,7 +43,8 @@ print(args)
 
 results_loaded = sc.load_results(args.conf, two_heads=True)
 conf  = results_loaded["conf"]
-stats = results_loaded["stats"]
+if args.inverse_normalization == 1:
+    stats = results_loaded["stats"]
 
 x = sc.load_sparse(args.x)
 x = sc.fold_transform_inputs(x, folding_size=conf.fold_inputs, transform=conf.input_transform)

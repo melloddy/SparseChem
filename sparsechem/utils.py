@@ -52,15 +52,16 @@ def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
     return y_inv_norm
 
 def normalize_regr(y_regr, mean=None, std=None):
-    tot = np.array(y_regr.sum(axis=0).squeeze())[0]
+    y_regr_64 = scipy.sparse.csc_matrix(y_regr, dtype=np.float64)
+    tot = np.array(y_regr_64.sum(axis=0).squeeze())[0]
 
-    N = y_regr.getnnz(axis=0)
+    N = y_regr_64.getnnz(axis=0)
     m = tot/N
     diagm = scipy.sparse.diags(m, 0)
-    y_mask = y_regr.copy()
+    y_mask = y_regr_64.copy()
     y_mask.data = np.ones_like(y_mask.data)
-    y_normalized = y_regr - y_mask * diagm
-    sqr = y_regr.copy()
+    y_normalized = y_regr_64 - y_mask * diagm
+    sqr = y_regr_64.copy()
     sqr.data **= 2
     msquared = np.square(m)
     variance = sqr.sum(axis=0)/N - msquared

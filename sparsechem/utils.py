@@ -54,13 +54,15 @@ def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
 def normalize_regr(y_regr, mean=None, std=None):
     y_regr_64 = scipy.sparse.csc_matrix(y_regr, dtype=np.float64)
     tot = np.array(y_regr_64.sum(axis=0).squeeze())[0]
-
+    set_regr = set([(i,j) for i,j in zip(y_regr_64.nonzero()[0], y_regr_64.nonzero()[1])])
     N = y_regr_64.getnnz(axis=0)
     m = tot/N
     diagm = scipy.sparse.diags(m, 0)
     y_mask = y_regr_64.copy()
     y_mask.data = np.ones_like(y_mask.data)
     y_normalized = y_regr_64 - y_mask * diagm
+    set_norm = set([(i,j) for i,j in zip(y_normalized.nonzero()[0], y_normalized.nonzero()[1])])
+    set_delta = set_regr - set_norm
     sqr = y_regr_64.copy()
     sqr.data **= 2
     msquared = np.square(m)
@@ -68,6 +70,8 @@ def normalize_regr(y_regr, mean=None, std=None):
     stdev_inv = 1/np.sqrt(variance)
     diagstdev_inv = scipy.sparse.diags(np.array(stdev_inv)[0],0)
     y_normalized = y_normalized.multiply(y_mask * diagstdev_inv)
+    for delta in set_delta:
+        y_normalized[delta[0],delta[1]]=0
     return y_normalized, m, variance
 
 def count_parameters(model):

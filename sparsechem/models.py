@@ -136,7 +136,7 @@ class LastNet(torch.nn.Module):
            output_size_initial = conf.last_hidden_sizes[0]
            self.net.add_module(f"initial_layer", nn.Sequential(
                non_linearities[conf.last_non_linearity](),
-               nn.Dropout(conf.last_dropout),
+               nn.Dropout(conf.middle_dropout),
                nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size_initial),
            ))
            for i in range(len(conf.last_hidden_sizes) - 1):

@@ -391,8 +391,10 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         b["x_ind"],
         b["x_data"],
         size = [b["batch_size"], input_size]).to(dev, non_blocking=True)
-
-    yc_hat_all, yr_hat_all = net(X)
+    if net.cat_id_size is None:
+        yc_hat_all, yr_hat_all = net(X)
+    else:
+        yc_hat_all, yr_hat_all, ycat_hat_all = net(X)
     if normalize_inv is not None:
        #inverse normalization
        yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"], dev).to(dev)
@@ -739,7 +741,7 @@ def load_task_weights(filename, y, label):
         aggregation_weight
         task_type
     """
-    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor())
+    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor(), cat_id=None)
     if y is None:
         assert filename is None, f"Weights provided for {label}, please add also --{label}"
         res.training_weight = torch.ones(0)
@@ -759,7 +761,7 @@ def load_task_weights(filename, y, label):
     df.sort_values("task_id", inplace=True)
 
     for col in df.columns:
-        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight"]
+        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight","cat_id"]
         assert col in cols, f"Unsupported colum '{col}' in task weight file. Supported columns: {cols}."
 
     assert y.shape[1] == df.shape[0], f"task weights for '{label}' have different size ({df.shape[0]}) to {label} columns ({y.shape[1]})."
@@ -779,6 +781,8 @@ def load_task_weights(filename, y, label):
     if "censored_weight" in df:
         assert (0 <= df.censored_weight).all(), f"Found negative censored_weight for {label}. Censored weights must be non-negative."
         res.censored_weight = torch.FloatTensor(df.censored_weight.values)
+    if "cat_id" in df:
+        res.cat_id = df.cat_id.values
 
     return res
 

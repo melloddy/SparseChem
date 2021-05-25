@@ -203,7 +203,12 @@ args.output_size = dataset_tr.output_size
 
 args.class_output_size = dataset_tr.class_output_size
 args.regr_output_size  = dataset_tr.regr_output_size
-
+if tasks_class.cat_id is not None:
+    cat_id_list = [x for x in tasks_class.cat_id if str(x) != 'nan']
+    cat_id_size = len(set(cat_id_list))
+else:
+    cat_id_size = 0
+args.cat_id_size = cat_id_size
 dev  = torch.device(args.dev)
 net  = sc.SparseFFN(args).to(dev)
 loss_class = torch.nn.BCEWithLogitsLoss(reduction="none")

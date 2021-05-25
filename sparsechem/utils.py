@@ -385,7 +385,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", cat_id_list=None, normalize_inv=None):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
@@ -443,7 +443,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
-                     normalize_loss=None, num_int_batches=1, progress=True):
+                     normalize_loss=None, num_int_batches=1, progress=True, cat_id_list=None):
     net.train()
 
     int_count = 0
@@ -455,7 +455,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         if norm is None:
             norm = b["batch_size"] * num_int_batches
 
-        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
+        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev, cat_id_list=cat_id_list)
         loss = fwd["yc_loss"] + fwd["yr_loss"]
         loss_norm = loss / norm
         loss_norm.backward()
@@ -741,7 +741,7 @@ def load_task_weights(filename, y, label):
         aggregation_weight
         task_type
     """
-    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor(), cat_id=None)
+    res = types.SimpleNamespace(task_id=None, training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor(), cat_id=None)
     if y is None:
         assert filename is None, f"Weights provided for {label}, please add also --{label}"
         res.training_weight = torch.ones(0)
@@ -773,6 +773,7 @@ def load_task_weights(filename, y, label):
     assert (df.task_id < df.shape[0]).all(), f"task ids in task weights (for {label}) must be below number of tasks"
 
     res.training_weight = torch.FloatTensor(df.training_weight.values)
+    res.task_id = df.task_id.values
     if "aggregation_weight" in df:
         assert (0 <= df.aggregation_weight).all(), f"Found negative aggregation_weight for {label}. Aggregation weights must be non-negative."
         res.aggregation_weight = df.aggregation_weight.values

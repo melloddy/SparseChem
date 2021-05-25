@@ -203,9 +203,10 @@ args.output_size = dataset_tr.output_size
 
 args.class_output_size = dataset_tr.class_output_size
 args.regr_output_size  = dataset_tr.regr_output_size
+tasks_cat_id_list = None
 if tasks_class.cat_id is not None:
-    cat_id_list = [x for x in tasks_class.cat_id if str(x) != 'nan']
-    cat_id_size = len(set(cat_id_list))
+    tasks_cat_id_list = [[x,i] for i,x in enumerate(tasks_class.cat_id) if str(x) != 'nan']
+    cat_id_size = len(tasks_cat_id_list)
 else:
     cat_id_size = 0
 args.cat_id_size = cat_id_size
@@ -241,7 +242,9 @@ for epoch in range(args.epochs):
         censored_weight = tasks_regr.censored_weight,
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2)
+        progress        = args.verbose >= 2,
+        cat_id_list     = tasks_cat_id_list
+        )
 
     t1 = time.time()
 

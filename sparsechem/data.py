@@ -102,7 +102,7 @@ def patterns_match(x, y):
     return True
 
 class ClassRegrSparseDataset(Dataset):
-    def __init__(self, x, y_class, y_regr, y_censor=None):
+    def __init__(self, x, y_class, y_regr, y_censor=None, y_cat_columns=None):
         '''
         Creates dataset for two outputs Y.
         Args:
@@ -110,6 +110,7 @@ class ClassRegrSparseDataset(Dataset):
             y_class (sparse matrix):  class data [n_samples, class_tasks]
             y_regr (sparse matrix):   regression data [n_samples, regr_tasks]
             y_censor (sparse matrix): censoring matrix, for regression data [n_samples, regr_task]
+            y_cat_columns (numpy array): column indices representing catalogue task [n_cat_tasks]
         '''
         if y_censor is None:
             y_censor = scipy.sparse.csr_matrix(y_regr.shape)
@@ -120,6 +121,10 @@ class ClassRegrSparseDataset(Dataset):
 
         self.x       = x.tocsr(copy=False).astype(np.float32)
         self.y_class = y_class.tocsr(copy=False).astype(np.float32)
+        if y_cat_columns is not None:
+            self.y_cat_class = self.y_class[:,y_cat_columns]
+        else:
+            self.y_cat_class = None
         self.y_regr  = y_regr.tocsr(copy=False).astype(np.float32)
         self.y_censor = y_censor.tocsr(copy=False).astype(np.float32)
 
@@ -130,7 +135,9 @@ class ClassRegrSparseDataset(Dataset):
 
         # scale labels from {-1, +1} to {0, 1}, zeros are stored explicitly
         self.y_class.data = (self.y_class.data + 1) / 2.0
-
+        if y_cat_columns is not None:
+           self.y_cat_class.data = (self.y_cat_class.data + 1) / 2.0
+    
     def __len__(self):
         return(self.x.shape[0])
 
@@ -161,6 +168,9 @@ class ClassRegrSparseDataset(Dataset):
             out["yr_ind"], out["yr_data"] = get_row(self.y_regr, idx)
             if self.y_censor.nnz > 0:
                 out["ycen_ind"], out["ycen_data"] = get_row(self.y_censor, idx)
+
+        if self.y_cat_class is not None:
+            out["yc_cat_ind"], out["yc_cat_data"] = get_row(self.y_cat_class, idx)
 
         return out
 
@@ -198,6 +208,10 @@ class ClassRegrSparseDataset(Dataset):
         else:
             out["ycen_ind"]  = None
             out["ycen_data"] = None
+
+        if "yc_cat_ind" in lists:
+            out["yc_cat_ind"]  = to_idx_tensor(lists["yc_cat_ind"])
+            out["yc_cat_data"] = torch.from_numpy(np.concatenate(lists["yc_cat_data"]))
 
         out["batch_size"] = len(batch)
         return out

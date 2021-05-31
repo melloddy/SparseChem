@@ -385,7 +385,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", cat_id_list=None, normalize_inv=None):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
@@ -405,7 +405,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     out["yr_loss"]    = 0
     out["yc_weights"] = 0
     out["yr_weights"] = 0
-
+    out["yc_cat_loss"] = 0 
     if net.class_output_size > 0:
         yc_ind  = b["yc_ind"].to(dev, non_blocking=True)
         yc_w    = weights_class[yc_ind[1]]
@@ -417,6 +417,11 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yc_loss"] = (loss_class(yc_hat, yc_data) * yc_w).sum()
         out["yc_weights"] = yc_w.sum()
 
+        if net.cat_id_size is not None:
+            yc_cat_ind = b["yc_cat_ind"].to(dev, non_blocking=True)
+            yc_cat_data = b["yc_cat_data"].to(dev, non_blocking=True)
+            yc_cat_hat = ycat_hat_all[yc_cat_ind[0], yc_cat_ind[1]]
+            out["yc_cat_loss"] = loss_class(yc_cat_hat, yc_cat_data).sum() 
     if net.regr_output_size > 0:
         yr_ind  = b["yr_ind"].to(dev, non_blocking=True)
         yr_w    = weights_regr[yr_ind[1]]
@@ -443,7 +448,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
-                     normalize_loss=None, num_int_batches=1, progress=True, cat_id_list=None):
+                     normalize_loss=None, num_int_batches=1, progress=True):
     net.train()
 
     int_count = 0
@@ -455,7 +460,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         if norm is None:
             norm = b["batch_size"] * num_int_batches
 
-        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev, cat_id_list=cat_id_list)
+        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
         loss = fwd["yc_loss"] + fwd["yr_loss"]
         loss_norm = loss / norm
         loss_norm.backward()

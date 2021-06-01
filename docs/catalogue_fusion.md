@@ -10,7 +10,7 @@ With Catalogue fusion partners have the option to fuse these tasks in a separate
 
 # How to use Catalogue Fusion
 
-The tasks to be fused in a separate catalogue are specified in the weight file using an extra column `cat_id`. For example:
+The tasks to be fused in a separate catalogue head should be specified in the weight file using an extra column `cat_id`. For example:
 
 
 

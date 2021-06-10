@@ -663,7 +663,10 @@ def predict_sparse(net, loader, dev, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            yc, yr = net(X)
+            if net.cat_id_size is None:
+                yc, yr = net(X)
+            else:
+                yc, yr, yc_cat = net(X)
             class_collector.append(b, yc)
             regr_collector.append(b, yr)
 

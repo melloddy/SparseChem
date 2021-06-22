@@ -82,6 +82,7 @@ def normalize_regr(y_regr, mean=None, std=None):
     for delta in set_delta:
         y_normalized[delta[0],delta[1]]=0
     assert y_regr_64.shape == y_normalized.shape, "Shapes of y_regr and y_normalized must be equal."
+    y_normalized.sort_indices()
     assert (y_regr_64.indptr == y_normalized.indptr).all(), "y_regr and y_normalized must have the same .indptr"
     assert (y_regr_64.indices == y_normalized.indices).all(), "y_regr and y_normalized must have the same .indptr"
     return y_normalized, m, variance

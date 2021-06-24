@@ -54,6 +54,10 @@ def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
         set_delta = set_mask - set_inv_norm
         for delta in set_delta:
             y_inv_norm[delta[0],delta[1]]=0
+        assert yr_hat_all.shape == y_inv_norm.shape, "Shapes of yr_hat_all and y_inv_norm must be equal."
+        y_inv_norm.sort_indices()
+        assert (yr_hat_all.indptr == y_inv_norm.indptr).all(), "yr_hat_all and y_inv_norm must have the same .indptr"
+        assert (yr_hat_all.indices == y_inv_norm.indices).all(), "yr_hat_all and y_inv_norm must have the same .indices"
     return y_inv_norm
 
 def normalize_regr(y_regr, mean=None, std=None):
@@ -77,6 +81,10 @@ def normalize_regr(y_regr, mean=None, std=None):
     y_normalized = y_normalized.multiply(y_mask * diagstdev_inv)
     for delta in set_delta:
         y_normalized[delta[0],delta[1]]=0
+    assert y_regr_64.shape == y_normalized.shape, "Shapes of y_regr and y_normalized must be equal."
+    y_normalized.sort_indices()
+    assert (y_regr_64.indptr == y_normalized.indptr).all(), "y_regr and y_normalized must have the same .indptr"
+    assert (y_regr_64.indices == y_normalized.indices).all(), "y_regr and y_normalized must have the same .indptr"
     return y_normalized, m, variance
 
 def count_parameters(model):

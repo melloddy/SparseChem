@@ -769,7 +769,7 @@ def load_task_weights(filename, y, label):
     df.sort_values("task_id", inplace=True)
 
     for col in df.columns:
-        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight","cat_id"]
+        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight","catalog_id"]
         assert col in cols, f"Unsupported colum '{col}' in task weight file. Supported columns: {cols}."
 
     assert y.shape[1] == df.shape[0], f"task weights for '{label}' have different size ({df.shape[0]}) to {label} columns ({y.shape[1]})."
@@ -790,8 +790,8 @@ def load_task_weights(filename, y, label):
     if "censored_weight" in df:
         assert (0 <= df.censored_weight).all(), f"Found negative censored_weight for {label}. Censored weights must be non-negative."
         res.censored_weight = torch.FloatTensor(df.censored_weight.values)
-    if "cat_id" in df:
-        res.cat_id = df.cat_id.values
+    if "catalog_id" in df:
+        res.cat_id = df.catalog_id.values
 
     return res
 

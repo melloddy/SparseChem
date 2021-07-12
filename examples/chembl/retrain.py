@@ -71,7 +71,7 @@ parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for tr
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
 parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
-parser.add_argument("--disable_fed_dropout", help="Set this to 1 to disable the dropout in the shared trunk", type=int, default=0)
+parser.add_argument("--disable_fed_dropout", help="Set this to 1 to disable the dropout in the shared trunk", type=int, default=1)
 
 args = parser.parse_args()
 if args.last_hidden_sizes is None:

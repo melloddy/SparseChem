@@ -96,7 +96,8 @@ else:
 vprint(f"Run name is '{name}'.")
 
 conf = sc.load_results(args.conf, two_heads=True)["conf"]
-setattr(conf, "last_hidden_sizes", [])
+if conf.last_hidden_sizes is None:
+   setattr(conf, "last_hidden_sizes", [])
 dev = args.dev
 net = sc.SparseFFN(conf).to(dev)
 state_dict = torch.load(args.model, map_location=torch.device(dev))

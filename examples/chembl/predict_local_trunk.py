@@ -55,7 +55,8 @@ print(args)
 
 conf = sc.load_results(args.conf, two_heads=True)["conf"]
 fedconf = sc.load_results(args.fedconf, two_heads=True)["conf"]
-setattr(fedconf, "last_hidden_sizes", [])
+if fedconf.last_hidden_sizes is None:
+   setattr(fedconf, "last_hidden_sizes", [])
 x = sc.load_sparse(args.x)
 x = sc.fold_transform_inputs(x, folding_size=conf.fold_inputs, transform=conf.input_transform)
 

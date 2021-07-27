@@ -385,7 +385,7 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None, y_cat_columns=None):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
@@ -421,6 +421,10 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
             yc_cat_ind = b["yc_cat_ind"].to(dev, non_blocking=True)
             yc_cat_data = b["yc_cat_data"].to(dev, non_blocking=True)
             yc_cat_hat = ycat_hat_all[yc_cat_ind[0], yc_cat_ind[1]]
+            if y_cat_columns is not None:
+               yc_hat_all[:,y_cat_columns] = ycat_hat_all
+               yc_hat  = yc_hat_all[yc_ind[0], yc_ind[1]]
+               out["yc_hat"]  = yc_hat
             out["yc_cat_loss"] = loss_class(yc_cat_hat, yc_cat_data).sum() 
     if net.regr_output_size > 0:
         yr_ind  = b["yr_ind"].to(dev, non_blocking=True)
@@ -506,7 +510,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
-            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev, normalize_inv=normalize_inv)
+            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev, normalize_inv=normalize_inv, y_cat_columns=loader.dataset.y_cat_columns)
             loss_class_sum += fwd["yc_loss"]
             loss_regr_sum  += fwd["yr_loss"]
             loss_class_weights += fwd["yc_weights"]
@@ -559,7 +563,7 @@ def enable_dropout(m):
     if type(m) == torch.nn.Dropout:
         m.train()
 
-def predict(net, loader, dev, progress=True, dropout=False):
+def predict(net, loader, dev, progress=True, dropout=False, y_cat_columns=None):
     """
     Makes predictions for all compounds in the loader.
     """
@@ -576,7 +580,12 @@ def predict(net, loader, dev, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            y_class, y_regr = net(X)
+            if net.cat_id_size is None:
+                y_class, y_regr = net(X)
+            else:
+                y_class, y_regr, yc_cat = net(X)
+                if y_cat_columns is not None:
+                   y_class[:,y_cat_columns] = yc_cat
             y_class_list.append(torch.sigmoid(y_class).cpu())
             y_regr_list.append(y_regr.cpu())
 
@@ -644,7 +653,7 @@ class SparseCollector(object):
         return csr_matrix((y_hat.numpy(), (y_row, y_col)), shape=shape)
 
 
-def predict_sparse(net, loader, dev, progress=True, dropout=False):
+def predict_sparse(net, loader, dev, progress=True, dropout=False, y_cat_columns=None):
     """
     Makes predictions for the Y values in loader.
     Returns sparse matrix of the shape loader.dataset.y.
@@ -667,6 +676,8 @@ def predict_sparse(net, loader, dev, progress=True, dropout=False):
                 yc, yr = net(X)
             else:
                 yc, yr, yc_cat = net(X)
+                if y_cat_columns is not None:
+                   yc[:,y_cat_columns] = yc_cat
             class_collector.append(b, yc)
             regr_collector.append(b, yr)
 

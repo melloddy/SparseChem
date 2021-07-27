@@ -2,6 +2,7 @@
 import sparsechem as sc
 import scipy.io
 import numpy as np
+import types
 import pandas as pd
 import torch
 import sys
@@ -35,6 +36,7 @@ parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, 
 parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
 parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluation", type=int, default=0)
 parser.add_argument("--inverse_normalization", help="If set to 1 enables inverse normalization given means and variances from config file", type=int, default=0)
+parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, training_weight, aggregation_weight, task_type (for classification tasks)", type=str, default=None)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
 
 args = parser.parse_args()
@@ -65,6 +67,21 @@ else:
         assert args.folding is None, "If --folding is given please also specify --predict_fold."
     if args.folding is None:
         assert args.predict_fold is None, "If --predict_fold is given please also specify --folding."
+
+res = types.SimpleNamespace(task_id=None, training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor(), cat_id=None)
+if args.weights_class is not None:
+   tasks_class = pd.read_csv(args.weights_class)
+   if "catalog_id" in tasks_class:
+        res.cat_id = tasks_class.catalog_id.values
+tasks_cat_id_list = None
+select_cat_ids = None
+if res.cat_id is not None:
+    tasks_cat_id_list = [[x,i] for i,x in enumerate(res.cat_id) if str(x) != 'nan']
+    tasks_cat_ids = [i for i,x in enumerate(res.cat_id) if str(x) != 'nan']
+    select_cat_ids = np.array(tasks_cat_ids)
+    cat_id_size = len(tasks_cat_id_list)
+else:
+    cat_id_size = 0
 
 dev = args.dev
 net = sc.SparseFFN(conf).to(dev)
@@ -103,9 +120,9 @@ if args.last_hidden:
     print(f"Saved (numpy) matrix of hiddens to '{filename}'.")
 else:
     if args.y_class is None and args.y_regr is None:
-        class_out, regr_out = sc.predict(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
+        class_out, regr_out = sc.predict(net, loader_te, dev=dev, dropout=args.dropout, progress=True, y_cat_columns=select_cat_ids)
     else:
-        class_out, regr_out = sc.predict_sparse(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
+        class_out, regr_out = sc.predict_sparse(net, loader_te, dev=dev, dropout=args.dropout, progress=True, y_cat_columns=select_cat_ids)
         if args.inverse_normalization == 1:
            regr_out = sc.inverse_normalization(regr_out, mean=np.array(stats["mean"]), variance=np.array(stats["var"]), array=True)
     if net.class_output_size > 0:

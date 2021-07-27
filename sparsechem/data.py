@@ -121,6 +121,7 @@ class ClassRegrSparseDataset(Dataset):
 
         self.x       = x.tocsr(copy=False).astype(np.float32)
         self.y_class = y_class.tocsr(copy=False).astype(np.float32)
+        self.y_cat_columns = y_cat_columns
         if y_cat_columns is not None:
             self.y_cat_class = self.y_class[:,y_cat_columns]
         else:
@@ -140,6 +141,10 @@ class ClassRegrSparseDataset(Dataset):
     
     def __len__(self):
         return(self.x.shape[0])
+
+    @property
+    def get_cat_columns(self):
+        return self.y_cat_columns
 
     @property
     def input_size(self):

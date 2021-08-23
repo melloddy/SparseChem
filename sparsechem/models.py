@@ -29,6 +29,9 @@ class Scaling(torch.nn.Module):
             return out + self.bias
         return out
 
+    def GetRegularizer(self):
+        return torch.norm((self.weight - 1))
+
 class SparseLinear(torch.nn.Module):
     """
     Linear layer with sparse input tensor, and dense output.
@@ -212,13 +215,28 @@ class SparseFFN(torch.nn.Module):
        #     LastNet(conf), #made it separate
         )
 
+        self.scaling = None #Scaling(conf.hidden_sizes[-1])
         if self.class_output_size is None or self.regr_output_size is None:
             raise ValueError("Both regression and classification tergets are needed for hybrid mode")
         self.classLast = LastNet(conf, output_size = conf.class_output_size, last_non_linearity = 'relu') #Override output size
-        self.regrLast  = nn.Sequential(
-                Scaling(conf.hidden_sizes[-1]),
-                LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
-                )
+        if conf.scaling_regularizer == np.inf:
+            self.regrLast  =  nn.Sequential(
+                    LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
+                    )
+        else:
+            self.scaling = Scaling(conf.hidden_sizes[-1])
+            self.regrLast  =  nn.Sequential(
+                    self.scaling,
+                    LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
+                   )
+            self.scaling_regularizer = conf.scaling_regularizer
+
+
+    def GetRegularizer(self):
+        if self.scaling is not None:
+            return self.scaling_regularizer * self.scaling.GetRegularizer()
+        else:
+            return 0;
 
     @property
     def has_2heads(self):

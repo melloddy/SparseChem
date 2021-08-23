@@ -63,6 +63,8 @@ parser.add_argument("--save_model", help="Set this to 0 if the model should not 
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
+parser.add_argument("--regression_weight", help="between 0 and 1 relative weight of regression loss vs classification loss", type=float, default=0.5)
+parser.add_argument("--scaling_regularizer", help="L2 regularizer of the scaling layer, if inf scaling layer is switched off", type=float, default=np.inf)
 
 args = parser.parse_args()
 
@@ -231,12 +233,13 @@ for epoch in range(args.epochs):
         loss_class      = loss_class,
         loss_regr       = loss_regr,
         dev             = dev,
-        weights_class   = tasks_class.training_weight,
-        weights_regr    = tasks_regr.training_weight,
+        weights_class   = tasks_class.training_weight * (1-args.regression_weight) * 2,
+        weights_regr    = tasks_regr.training_weight * args.regression_weight * 2,
         censored_weight = tasks_regr.censored_weight,
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2)
+        progress        = args.verbose >= 2,
+        )
 
     t1 = time.time()
 

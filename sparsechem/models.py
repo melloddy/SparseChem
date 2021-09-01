@@ -230,6 +230,13 @@ class SparseFFN(torch.nn.Module):
                     LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
                    )
             self.scaling_regularizer = conf.scaling_regularizer
+        
+        regmask = torch.ones(1,conf.hidden_sizes[-1])
+        regmask[:,:-conf.regression_feature_size] = 0.0
+        classmask = torch.ones(1,conf.hidden_sizes[-1])
+        classmask[:,conf.class_feature_size:] = 0.0
+        self.register_buffer('regmask', regmask)
+        self.register_buffer('classmask', classmask)
 
 
     def GetRegularizer(self):
@@ -251,7 +258,8 @@ class SparseFFN(torch.nn.Module):
   #      if self.class_output_size is None:
   #          return out
         ## splitting to class and regression
-        return self.classLast(out), self.regrLast(out)
+
+        return self.classLast(out * self.classmask), self.regrLast(out * self.regmask)
 
 class SparseFFN_combined(nn.Module):
   def __init__(self, conf, shared_trunk, local_trunk, head):

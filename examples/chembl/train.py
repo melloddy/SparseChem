@@ -63,8 +63,11 @@ parser.add_argument("--save_model", help="Set this to 0 if the model should not 
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
+#hybrid model features
 parser.add_argument("--regression_weight", help="between 0 and 1 relative weight of regression loss vs classification loss", type=float, default=0.5)
 parser.add_argument("--scaling_regularizer", help="L2 regularizer of the scaling layer, if inf scaling layer is switched off", type=float, default=np.inf)
+parser.add_argument("--class_feature_size", help="Number of leftmost features used from the output of the trunk (default: use all)", type=int, default=-1)
+parser.add_argument("--regression_feature_size", help="Number of rightmost features used from the output of the trunk (default: use all)", type=int, default=-1)
 
 args = parser.parse_args()
 
@@ -73,6 +76,18 @@ def vprint(s=""):
         print(s)
 
 vprint(args)
+
+if args.class_feature_size == -1:
+    args.class_feature_size = args.hidden_sizes[-1]
+if args.regression_feature_size == -1:
+    args.regression_feature_size = args.hidden_sizes[-1]
+
+assert args.regression_feature_size <= args.hidden_sizes[-1], "Regression feature size cannot be larger than the trunk output"
+assert args.class_feature_size <= args.hidden_sizes[-1], "Classification feature size cannot be larger than the trunk output"
+assert args.regression_feature_size + args.class_feature_size >= args.hidden_sizes[-1], "Unused features in the trunk! Set regression_feature_size + class_feature_size >= trunk output!"
+#if args.regression_feature_size != args.hidden_sizes[-1] or args.class_feature_size != args.hidden_sizes[-1]:
+#    raise ValueError("Hidden spliting not implemented yet!")
+
 
 if args.run_name is not None:
     name = args.run_name
@@ -270,6 +285,10 @@ for epoch in range(args.epochs):
 
     scheduler.step()
 
+print("DEBUG data for hidden spliting")
+print (f"Classification mask: Sum = {net.classmask.sum()}\t Uniques: {np.unique(net.classmask)}")
+print (f"Regression mask:     Sum = {net.regmask.sum()}\t Uniques: {np.unique(net.regmask)}")
+print (f"overlap: {(net.regmask * net.classmask).sum()}")
 writer.close()
 vprint()
 vprint("Saving performance metrics (AUCs) and model.")

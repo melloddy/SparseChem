@@ -68,8 +68,17 @@ parser.add_argument("--regression_weight", help="between 0 and 1 relative weight
 parser.add_argument("--scaling_regularizer", help="L2 regularizer of the scaling layer, if inf scaling layer is switched off", type=float, default=np.inf)
 parser.add_argument("--class_feature_size", help="Number of leftmost features used from the output of the trunk (default: use all)", type=int, default=-1)
 parser.add_argument("--regression_feature_size", help="Number of rightmost features used from the output of the trunk (default: use all)", type=int, default=-1)
+parser.add_argument("--last_hidden_sizes_reg", nargs="+", help="Hidden sizes in the regression head", default=None, type=int)
+parser.add_argument("--last_hidden_sizes_class", nargs="+", help="Hidden sizes in the classification head", default=None, type=int)
+
 
 args = parser.parse_args()
+
+if (args.last_hidden_sizes is not None) and ((args.last_hidden_sizes_class is not None) or (args.last_hidden_sizes_reg is not None)):
+    raise ValueError("Head specific and general last_hidden_sizes argument were both specified!")
+if (args.last_hidden_sizes is not None):
+    args.last_hidden_sizes_class = args.last_hidden_sizes
+    args.last_hidden_sizes_reg   = args.last_hidden_sizes
 
 def vprint(s=""):
     if args.verbose:

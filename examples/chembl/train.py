@@ -39,8 +39,8 @@ parser.add_argument("--normalize_regr_va", help="Set this to 1 if the regression
 parser.add_argument("--inverse_normalization", help="Set this to 1 if the regression tasks in validation fold should be inverse normalized at validation time", type=int, default=0)
 parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
 parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes in the head", default=None, type=int)
-parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
-parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
+#parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
+#parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
 parser.add_argument("--weight_decay", help="Weight decay", type=float, default=0.0)
 parser.add_argument("--last_non_linearity", help="Last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
 parser.add_argument("--middle_non_linearity", "--non_linearity", help="Before last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
@@ -70,15 +70,26 @@ parser.add_argument("--class_feature_size", help="Number of leftmost features us
 parser.add_argument("--regression_feature_size", help="Number of rightmost features used from the output of the trunk (default: use all)", type=int, default=-1)
 parser.add_argument("--last_hidden_sizes_reg", nargs="+", help="Hidden sizes in the regression head", default=None, type=int)
 parser.add_argument("--last_hidden_sizes_class", nargs="+", help="Hidden sizes in the classification head", default=None, type=int)
+parser.add_argument("--dropouts_reg", nargs="+", help="List of dropout values used in the regression head", default=[], type=float)
+parser.add_argument("--dropouts_class", nargs="+", help="List of dropout values used in the classification head", default=[], type=float)
+parser.add_argument("--dropouts_trunk", nargs="+", help="List of dropout values used in the trunk", default=[], type=float)
 
 
 args = parser.parse_args()
+
 
 if (args.last_hidden_sizes is not None) and ((args.last_hidden_sizes_class is not None) or (args.last_hidden_sizes_reg is not None)):
     raise ValueError("Head specific and general last_hidden_sizes argument were both specified!")
 if (args.last_hidden_sizes is not None):
     args.last_hidden_sizes_class = args.last_hidden_sizes
     args.last_hidden_sizes_reg   = args.last_hidden_sizes
+
+if args.last_hidden_sizes_reg is not None:
+    assert len(args.last_hidden_sizes_reg) == len(args.dropouts_reg), "Number of hiddens and number of dropout values specified must be equal in the regression head!"
+if args.last_hidden_sizes_class is not None:
+    assert len(args.last_hidden_sizes_class) == len(args.dropouts_class), "Number of hiddens and number of dropout values specified must be equal in the classification head!"
+if args.hidden_sizes is not None:
+    assert len(args.hidden_sizes) == len(args.dropouts_trunk), "Number of hiddens and number of dropout values specified must be equal in the trunk!"
 
 def vprint(s=""):
     if args.verbose:
@@ -101,7 +112,7 @@ assert args.regression_feature_size + args.class_feature_size >= args.hidden_siz
 if args.run_name is not None:
     name = args.run_name
 else:
-    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo_r{'.'.join([str(d) for d in args.dropouts_reg])}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
 vprint(f"Run name is '{name}'.")

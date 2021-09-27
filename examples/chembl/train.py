@@ -12,10 +12,13 @@ import os.path
 import time
 import json
 import functools
+from contextlib import redirect_stdout
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
+from torchinfo import summary
+from pytorch_memlab import MemReporter
 import multiprocessing
 multiprocessing.set_start_method('fork', force=True)
 
@@ -61,6 +64,7 @@ parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
+parser.add_argument("--profile", help="Set this to 1 to output memory profile information", type=int, default=0)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 
@@ -217,7 +221,20 @@ tasks_regr.censored_weight  = tasks_regr.censored_weight.to(dev)
 
 vprint("Network:")
 vprint(net)
+reporter = None
+if args.profile == 1:
+   #####   output saving   #####
+   if not os.path.exists(args.output_dir):
+       os.makedirs(args.output_dir)
 
+   reporter = MemReporter(net)
+
+   X_dummy = torch.ones(1,32000)
+   with open(f"{args.output_dir}/memprofile.txt", "w+") as profile_file:
+        with redirect_stdout(profile_file):
+             summary(net, input_data=X_dummy)
+             profile_file.write(f"\nInitial model detailed report:\n\n")
+             reporter.report()
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
@@ -236,10 +253,18 @@ for epoch in range(args.epochs):
         censored_weight = tasks_regr.censored_weight,
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2)
+        progress        = args.verbose >= 2,
+        reporter = reporter,
+        writer = writer,
+        epoch = epoch,
+        args = args)
 
+    if args.profile == 1:
+       with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+            profile_file.write(f"\nAfter epoch {epoch} model detailed report:\n\n")
+            with redirect_stdout(profile_file):
+                 reporter.report()
     t1 = time.time()
-
     eval_round = (args.eval_frequency > 0) and ((epoch + 1) % args.eval_frequency == 0)
     last_round = epoch == args.epochs - 1
 

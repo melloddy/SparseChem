@@ -455,11 +455,12 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
-                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None):
+                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None):
     net.train()
 
     int_count = 0
     batch_count = 0
+    #scaler = torch.cuda.amp.GradScaler()
     for b in tqdm(loader, leave=False, disable=(progress == False)):
         if int_count == 0:
             optimizer.zero_grad()
@@ -467,31 +468,47 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         norm = normalize_loss
         if norm is None:
             norm = b["batch_size"] * num_int_batches
-
-        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
+        if args.mixed_precision == 1:
+            mixed_precision = True
+        else:
+            mixed_precision = False
+        with torch.cuda.amp.autocast(enabled=mixed_precision):
+             fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
         if writer is not None and reporter is not None:
-           writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2) 
-           if batch_count == 1:
-              with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+            writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2) 
+            if batch_count == 1:
+                with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
                    with redirect_stdout(profile_file):
                         profile_file.write(f"\nForward pass model detailed report:\n\n")
                         reporter.report()
         loss = fwd["yc_loss"] + fwd["yr_loss"]
         loss_norm = loss / norm
-        loss_norm.backward()
+             #loss_norm.backward()
+        if mixed_precision:
+           scaler.scale(loss_norm).backward()
+        else:
+           loss_norm.backward()
         if writer is not None and reporter is not None:
-           writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2) 
+                writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2) 
         int_count += 1
         if int_count == num_int_batches:
-            optimizer.step()
-            if writer is not None and reporter is not None:
-               writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2) 
-            int_count = 0
-            batch_count+=1
+           if mixed_precision:
+               scaler.step(optimizer)
+               scaler.update()
+           else:
+               optimizer.step()
+           if writer is not None and reporter is not None:
+                   writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2) 
+           int_count = 0
+           batch_count+=1
 
     if int_count > 0:
         ## process tail batch (should not happen)
-        optimizer.step()
+        if mixed_precision:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
 
 
 def aggregate_results(df, weights):

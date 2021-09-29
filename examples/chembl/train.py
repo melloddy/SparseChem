@@ -12,6 +12,7 @@ import os.path
 import time
 import json
 import functools
+#from apex import amp
 from contextlib import redirect_stdout
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
@@ -65,6 +66,7 @@ parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progres
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
 parser.add_argument("--profile", help="Set this to 1 to output memory profile information", type=int, default=0)
+parser.add_argument("--mixed_precision", help="Set this to 1 to run in mixed precision mode (vs single precision)", type=int, default=0)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 
@@ -239,7 +241,7 @@ optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.wei
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
 num_prints = 0
-
+scaler = torch.cuda.amp.GradScaler()
 for epoch in range(args.epochs):
     t0 = time.time()
     sc.train_class_regr(
@@ -257,7 +259,8 @@ for epoch in range(args.epochs):
         reporter = reporter,
         writer = writer,
         epoch = epoch,
-        args = args)
+        args = args,
+        scaler = scaler)
 
     if args.profile == 1:
        with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:

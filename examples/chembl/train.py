@@ -12,6 +12,7 @@ import os.path
 import time
 import json
 import functools
+import csv
 #from apex import amp
 from contextlib import redirect_stdout
 from sparsechem import Nothing
@@ -84,6 +85,8 @@ else:
     name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    if args.mixed_precision == 1:
+        name += f"_mixed_precision"
 vprint(f"Run name is '{name}'.")
 
 if args.save_board:
@@ -297,6 +300,11 @@ for epoch in range(args.epochs):
 
 writer.close()
 vprint()
+if args.profile == 1:
+   multiplexer = sc.create_multiplexer(tb_name)
+   #export_scalars(multiplexer, '.', "GPUmem", "testcsv.csv")
+   data = sc.extract_scalars(multiplexer, '.', "GPUmem")
+   vprint(f"Peak GPU memory used: {sc.return_max_val(data)}MB")
 vprint("Saving performance metrics (AUCs) and model.")
 
 #####   model saving   #####

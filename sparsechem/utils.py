@@ -16,6 +16,7 @@ from contextlib import redirect_stdout
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 from scipy.sparse import csr_matrix
+from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
 
 class Nothing(object):
     def __getattr__(self, name):
@@ -32,6 +33,49 @@ class Nothing(object):
         return Nothing()
     def __repr__(self):
         return "Nothing"
+
+
+# Control downsampling: how many scalar data do we keep for each run/tag
+# combination?
+SIZE_GUIDANCE = {'scalars': 10000}
+
+
+def extract_scalars(multiplexer, run, tag):
+  """Extract tabular data from the scalars at a given run and tag.
+  The result is a list of 3-tuples (wall_time, step, value).
+  """
+  tensor_events = multiplexer.Tensors(run, tag)
+  return [
+     # (event.wall_time, event.step, tf.make_ndarray(event.tensor_proto).item())
+      (event.wall_time, event.step, event.tensor_proto.float_val[0])
+      for event in tensor_events
+  ]
+
+
+def create_multiplexer(logdir):
+  multiplexer = event_multiplexer.EventMultiplexer(
+      tensor_size_guidance=SIZE_GUIDANCE)
+  multiplexer.AddRunsFromDirectory(logdir)
+  multiplexer.Reload()
+  return multiplexer
+
+
+def export_scalars(multiplexer, run, tag, filepath, write_headers=True):
+  data = extract_scalars(multiplexer, run, tag)
+  with open(filepath, 'w') as outfile:
+    writer = csv.writer(outfile)
+    if write_headers:
+      writer.writerow(('wall_time', 'step', 'value'))
+    for row in data:
+      writer.writerow(row)
+
+def return_max_val(data):
+    max_val = 0
+    for row in data:
+        if row[2] > max_val:
+            max_val = row[2]
+    return max_val
+
 
 def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
     if array==False:

@@ -305,10 +305,10 @@ for epoch in range(args.epochs):
 
     scheduler.step()
 
-print("DEBUG data for hidden spliting")
-print (f"Classification mask: Sum = {net.classmask.sum()}\t Uniques: {np.unique(net.classmask)}")
-print (f"Regression mask:     Sum = {net.regmask.sum()}\t Uniques: {np.unique(net.regmask)}")
-print (f"overlap: {(net.regmask * net.classmask).sum()}")
+#print("DEBUG data for hidden spliting")
+#print (f"Classification mask: Sum = {net.classmask.sum()}\t Uniques: {np.unique(net.classmask)}")
+#print (f"Regression mask:     Sum = {net.regmask.sum()}\t Uniques: {np.unique(net.regmask)}")
+#print (f"overlap: {(net.regmask * net.classmask).sum()}")
 writer.close()
 vprint()
 vprint("Saving performance metrics (AUCs) and model.")

@@ -12,5 +12,5 @@ from .utils import load_sparse, load_check_sparse, load_results, save_results, l
 from .utils import Nothing
 from .utils import normalize_regr, inverse_normalization
 from .utils import keep_row_data
-from .utils import create_multiplexer, extract_scalars, return_max_val
+from .utils import create_multiplexer, extract_scalars, return_max_val, export_scalars
 from .version import __version__

@@ -304,7 +304,7 @@ writer.close()
 vprint()
 if args.profile == 1:
    multiplexer = sc.create_multiplexer(tb_name)
-   #export_scalars(multiplexer, '.', "GPUmem", "testcsv.csv")
+#   sc.export_scalars(multiplexer, '.', "GPUmem", "testcsv.csv")
    data = sc.extract_scalars(multiplexer, '.', "GPUmem")
    vprint(f"Peak GPU memory used: {sc.return_max_val(data)}MB")
 vprint("Saving performance metrics (AUCs) and model.")

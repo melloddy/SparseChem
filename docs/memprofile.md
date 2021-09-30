@@ -70,3 +70,7 @@ To use sparsechem in mixed precision mode you can enable it using this option:
                         single precision)
       
 ```
+
+# Remark
+
+When profiling sparsechem runs it is recommended to use unique run names for every run as some calculations like peak memory GPU usage are based on logs.

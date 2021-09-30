@@ -57,3 +57,6 @@ and opening
 ```
 http://localhost:6006/#scalars&_smoothingWeight=0
 ```
+You can also see how GPU memory behaves over training time:
+
+![GPUmem](docs/GPUmem.png "GPU memory profile")

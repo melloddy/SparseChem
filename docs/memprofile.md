@@ -49,3 +49,11 @@ The allocated memory on cuda:0: 3.47G
 Memory differs due to the matrix alignment or invisible gradient buffer tensors
 -------------------------------------------------------------------------------
 ``` 
+You can also open tensorboard using:
+```
+tensorboard --logdir <outputdir>
+```
+and opening 
+```
+http://localhost:6006/#scalars&_smoothingWeight=0
+```

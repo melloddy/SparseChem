@@ -60,3 +60,13 @@ http://localhost:6006/#scalars&_smoothingWeight=0
 You can also see how GPU memory behaves over training time:
 
 ![GPUmem](docs/GPUmem.png "GPU memory profile")
+
+# Mixed Precision
+
+To use sparsechem in mixed precision mode you can enable it using this option:
+```
+--mixed_precision MIXED_PRECISION
+                        Set this to 1 to run in mixed precision mode (vs
+                        single precision)
+      
+```

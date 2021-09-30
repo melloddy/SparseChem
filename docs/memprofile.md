@@ -4,7 +4,7 @@ There is also an option to profile the memory usage on GPU while training sparse
 
 # How to use Memory Profile option
 
-To enable memory profiling the following option needs to be activated:
+To enable memory profiling the following option needs to be activated when running `train.py`:
 
 ```
   --profile PROFILE     Set this to 1 to output memory profile information

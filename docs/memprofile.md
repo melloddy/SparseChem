@@ -1,6 +1,6 @@
 # Memory Profile
 
-There is also an option to profile the memory usage on GPU while training sparsechem. 
+There is also an option to profile the memory usage on GPU while training sparsechem. This branch requires the installation of the python modules: `torchinfo` and `pytorch_memlab`.
 
 # How to use Memory Profile option
 

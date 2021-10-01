@@ -537,7 +537,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                 writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
         int_count += 1
         if int_count == num_int_batches:
-           if mixed_precision:
+           if mixed_precision and not isinstance(optimizer,Nothing):
                scaler.step(optimizer)
                scaler.update()
            else:
@@ -549,7 +549,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
 
     if int_count > 0:
         ## process tail batch (should not happen)
-        if mixed_precision:
+        if mixed_precision and not isinstance(optimizer,Nothing):
             scaler.step(optimizer)
             scaler.update()
         else:

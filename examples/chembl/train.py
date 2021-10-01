@@ -19,7 +19,6 @@ from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
-from torchinfo import summary
 from pytorch_memlab import MemReporter
 import multiprocessing
 multiprocessing.set_start_method('fork', force=True)
@@ -124,7 +123,7 @@ tasks_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
 
 ## Input transformation
 ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=args.input_transform)
-
+print(f"count non zero:{ecfp[0].count_nonzero()}")
 num_pos    = np.array((y_class == +1).sum(0)).flatten()
 num_neg    = np.array((y_class == -1).sum(0)).flatten()
 num_class  = np.array((y_class != 0).sum(0)).flatten()
@@ -236,10 +235,8 @@ if args.profile == 1:
 
    reporter = MemReporter(net)
 
-   X_dummy = torch.ones(1,32000)
    with open(f"{args.output_dir}/memprofile.txt", "w+") as profile_file:
         with redirect_stdout(profile_file):
-             summary(net, input_data=X_dummy)
              profile_file.write(f"\nInitial model detailed report:\n\n")
              reporter.report()
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)

@@ -51,6 +51,7 @@ parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", t
 parser.add_argument("--input_size_freq", help="Number of high importance features", type=int, default=None)
 parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no folding)", type=int, default=None)
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
+parser.add_argument("--pi_zero", help="Reference class ratio to be used for calibrated aucpr", type=float, default=0.1)
 parser.add_argument("--min_samples_class", help="Minimum number samples in each class and in each fold for AUC calculation (only used if aggregation_weight is not provided in --weights_class)", type=int, default=5)
 parser.add_argument("--min_samples_auc", help="Obsolete: use 'min_samples_class'", type=int, default=None)
 parser.add_argument("--min_samples_regr", help="Minimum number of uncensored samples in each fold for regression metric calculation (only used if aggregation_weight is not provided in --weights_regr)", type=int, default=10)
@@ -182,7 +183,10 @@ if args.normalize_regression == 1 and args.normalize_regr_va == 0:
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
-
+pos_rate = num_pos_va/(num_pos_va+num_neg_va)
+pos_rate_ref = args.pi_zero
+cal_fact_aucpr = pos_rate*(1-pos_rate_ref)/(pos_rate_ref*(1-pos_rate))
+#import ipdb; ipdb.set_trace()
 batch_size  = int(np.ceil(args.batch_ratio * idx_tr.shape[0]))
 num_int_batches = 1
 
@@ -244,7 +248,8 @@ for epoch in range(args.epochs):
     last_round = epoch == args.epochs - 1
 
     if eval_round or last_round:
-        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv)
+        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv, cal_fact_aucpr=cal_fact_aucpr)
+   #     import ipdb; ipdb.set_trace()
         for key, val in results_va["classification_agg"].items():
             writer.add_scalar(key+"/va", val, epoch)
         for key, val in results_va["regression_agg"].items():

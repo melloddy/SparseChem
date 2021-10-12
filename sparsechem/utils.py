@@ -102,20 +102,22 @@ def calc_acc_kappa(recall, fpr, num_pos, num_neg):
     kappa = (acc - pexp) / (1 - pexp)
     return acc, kappa
 
-def all_metrics(y_true, y_score):
+def all_metrics(y_true, y_score, cal_fact_aucpr_task):
     """Compute classification metrics.
     Args:
         y_true     true labels (0 / 1)
         y_score    logit values
     """
     if len(y_true) <= 1 or (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan], "auc_pr_cal": [np.nan]})
         return df
 
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
     roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
     precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
+    precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
 
+    #import ipdb; ipdb.set_trace()
     bceloss = F.binary_cross_entropy_with_logits(
         input  = torch.FloatTensor(y_score),
         target = torch.FloatTensor(y_true),
@@ -130,6 +132,7 @@ def all_metrics(y_true, y_score):
     p_f1_max       = scipy.special.expit(pr_thresholds[f1_max_idx])
 
     auc_pr = sklearn.metrics.auc(x = recall, y = precision)
+    auc_pr_cal = sklearn.metrics.auc(x = recall, y = precision_cal)
     avg_prec_score = sklearn.metrics.average_precision_score(
           y_true  = y_true,
           y_score = y_score)
@@ -142,7 +145,7 @@ def all_metrics(y_true, y_score):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal]})
     return df
 
 def compute_corr(x, y):
@@ -179,7 +182,7 @@ def all_metrics_regr(y_true, y_score, y_censor=None):
     })
     return df
 
-def compute_metrics(cols, y_true, y_score, num_tasks):
+def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
     if len(cols) < 1:
         return pd.DataFrame({
             "roc_auc_score": np.nan,
@@ -195,7 +198,8 @@ def compute_metrics(cols, y_true, y_score, num_tasks):
     metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
-                  y_score = g.y_score.values))
+                  y_score = g.y_score.values,
+                  cal_fact_aucpr_task = cal_fact_aucpr[g['task'].values[0]]))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
@@ -237,11 +241,12 @@ def class_fold_counts(y_class, folding):
 def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     if metrics_tr is None:
         if header:
-            print("Epoch\tlogl_va |  auc_va | aucpr_va | maxf1_va | tr_time")
+            print("Epoch\tlogl_va |  auc_va | aucpr_va | aucpr_cal_va | maxf1_va | tr_time")
         output_fstr = (
             f"{epoch}.\t{metrics_va['logloss']:.5f}"
             f" | {metrics_va['roc_auc_score']:.5f}"
             f" |  {metrics_va['auc_pr']:.5f}"
+            f" |  {metrics_va['auc_pr_cal']:.5f}"
             f" |  {metrics_va['f1_max']:.5f}"
             f" | {train_time:6.1f}"
         )
@@ -272,6 +277,7 @@ columns_cr = [
     Column("bceloss",       size=8, dec= 5, title="bceloss"),
     Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
     Column("auc_pr",        size=8, dec= 5, title="aucpr"),
+    Column("auc_pr_cal",    size=8, dec= 5, title="aucpr_cal"),
     Column("f1_max",        size=8, dec= 5, title="f1_max"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("rmse",          size=9, dec= 5, title="rmse"),
@@ -489,7 +495,7 @@ def aggregate_results(df, weights):
     df2 = df.where(pd.isnull, 1) * weights[:,None]
     return (df2.multiply(1.0 / df2.sum(axis=0), axis=1) * df).sum(axis=0)
 
-def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None):
+def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None, cal_fact_aucpr=1):
     class_w = tasks_class.aggregation_weight
     regr_w  = tasks_regr.aggregation_weight
 
@@ -533,7 +539,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
             yc_ind  = torch.cat(data["yc_ind"], dim=1).numpy()
             yc_data = torch.cat(data["yc_data"], dim=0).numpy()
             yc_hat  = torch.cat(data["yc_hat"], dim=0).numpy()
-            out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks)
+            out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr)
             out["classification_agg"] = aggregate_results(out["classification"], weights=class_w)
             out["classification_agg"]["logloss"] = loss_class_sum.cpu().item() / loss_class_weights.cpu().item()
 

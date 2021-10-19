@@ -230,7 +230,8 @@ class SparseFFN(torch.nn.Module):
         else:
             self.class_output_size = None
             self.regr_output_size  = None
-        if hasattr(conf, "cat_id_size"):
+        if conf.enable_cat_fusion == 1:
+            self.cat_fusion = 1
             self.cat_id_size = conf.cat_id_size
             self.trunk = nn.Sequential(
                     SparseInputNet(conf),
@@ -240,6 +241,7 @@ class SparseFFN(torch.nn.Module):
             self.cat_head  = CatLastNet(conf)
         else:
             self.cat_id_size = None
+            self.cat_fusion = 0
             self.net = nn.Sequential(
                 SparseInputNet(conf),
                 MiddleNet(conf),
@@ -274,7 +276,7 @@ class SparseFFN(torch.nn.Module):
         return self.class_output_size is not None
 
     def forward(self, X, last_hidden=False):
-        if self.cat_id_size is not None:
+        if self.cat_fusion == 1:
             if last_hidden:
                H = self.net[:-1](X)
                return self.net[-1].net[:-1](H)

@@ -192,8 +192,18 @@ if args.internal_batch_max is not None:
         batch_size      = int(np.ceil(batch_size / num_int_batches))
 vprint(f"#internal batch size:   {batch_size}")
 
-dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr, y_censor=y_censor_tr)
-dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va, y_censor=y_censor_va)
+tasks_cat_id_list = None
+select_cat_ids = None
+if tasks_class.cat_id is not None:
+    tasks_cat_id_list = [[x,i] for i,x in enumerate(tasks_class.cat_id) if str(x) != 'nan']
+    tasks_cat_ids = [i for i,x in enumerate(tasks_class.cat_id) if str(x) != 'nan']
+    select_cat_ids = np.array(tasks_cat_ids)
+    cat_id_size = len(tasks_cat_id_list)
+else:
+    cat_id_size = 0
+
+dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr, y_censor=y_censor_tr, y_cat_columns=select_cat_ids)
+dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va, y_censor=y_censor_va, y_cat_columns=select_cat_ids)
 
 loader_tr = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 8, pin_memory=True, collate_fn=dataset_tr.collate, shuffle=True)
 loader_va = DataLoader(dataset_va, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=dataset_va.collate, shuffle=False)
@@ -203,6 +213,7 @@ args.output_size = dataset_tr.output_size
 
 args.class_output_size = dataset_tr.class_output_size
 args.regr_output_size  = dataset_tr.regr_output_size
+args.cat_id_size = cat_id_size
 
 dev  = torch.device(args.dev)
 net  = sc.SparseFFN(args).to(dev)
@@ -236,7 +247,8 @@ for epoch in range(args.epochs):
         censored_weight = tasks_regr.censored_weight,
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2)
+        progress        = args.verbose >= 2
+        )
 
     t1 = time.time()
 

@@ -232,7 +232,11 @@ class SparseFFN(torch.nn.Module):
             self.regr_output_size  = None
         if conf.enable_cat_fusion == 1:
             self.cat_fusion = 1
-            self.cat_id_size = conf.cat_id_size
+            if hasattr(conf, "cat_id_size"):
+               self.cat_id_size = conf.cat_id_size
+            else:
+               setattr(conf, "cat_id_size", 0)
+               self.cat_id_size = 0
             self.trunk = nn.Sequential(
                     SparseInputNet(conf),
                     MiddleNet(conf),

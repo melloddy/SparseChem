@@ -430,7 +430,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yc_loss"] = (loss_class(yc_hat, yc_data) * yc_w).sum()
         out["yc_weights"] = yc_w.sum()
 
-        if net.cat_id_size is not None:
+        if net.cat_id_size is not None and net.cat_id_size > 0:
             yc_cat_ind = b["yc_cat_ind"].to(dev, non_blocking=True)
             yc_cat_data = b["yc_cat_data"].to(dev, non_blocking=True)
             yc_cat_hat = ycat_hat_all[yc_cat_ind[0], yc_cat_ind[1]]

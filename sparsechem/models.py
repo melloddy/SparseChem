@@ -249,20 +249,21 @@ class SparseFFN(torch.nn.Module):
             )
 
         self.scaling = None #Scaling(conf.hidden_sizes[-1])
-        if self.class_output_size is None or self.regr_output_size is None:
-            raise ValueError("Both regression and classification tergets are needed for hybrid mode")
-        self.classLast = LastNet(conf, output_size = conf.class_output_size, last_non_linearity = 'relu') #Override output size
-        if conf.scaling_regularizer == np.inf:
-            self.regrLast  =  nn.Sequential(
-                    LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
-                    )
-        else:
-            self.scaling = Scaling(conf.hidden_sizes[-1])
-            self.regrLast  =  nn.Sequential(
-                    self.scaling,
-                    LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
-                   )
-            self.scaling_regularizer = conf.scaling_regularizer
+        if self.cat_fusion == 0:
+           if self.class_output_size is None or self.regr_output_size is None:
+               raise ValueError("Both regression and classification tergets are needed for hybrid mode")
+           self.classLast = LastNet(conf, output_size = conf.class_output_size, last_non_linearity = 'relu') #Override output size
+           if conf.scaling_regularizer == np.inf:
+               self.regrLast  =  nn.Sequential(
+                       LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
+                       )
+           else:
+               self.scaling = Scaling(conf.hidden_sizes[-1])
+               self.regrLast  =  nn.Sequential(
+                       self.scaling,
+                       LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
+                      )
+               self.scaling_regularizer = conf.scaling_regularizer
 
 
     def GetRegularizer(self):

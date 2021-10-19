@@ -464,7 +464,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
-                     weights_class, weights_regr, censored_weight,
+                     weights_class, weights_regr, censored_weight, 
                      normalize_loss=None, num_int_batches=1, progress=True):
     net.train()
 
@@ -478,7 +478,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
             norm = b["batch_size"] * num_int_batches
 
         fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
-        loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"]
+        loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"] + net.GetRegularizer()
         loss_norm = loss / norm
         loss_norm.backward()
 

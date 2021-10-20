@@ -277,7 +277,7 @@ columns_cr = [
     Column("bceloss",       size=8, dec= 5, title="bceloss"),
     Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
     Column("auc_pr",        size=8, dec= 5, title="aucpr"),
-    Column("auc_pr_cal",    size=8, dec= 5, title="aucpr_cal"),
+    Column("auc_pr_cal",    size=9, dec= 5, title="aucpr_cal"),
     Column("f1_max",        size=8, dec= 5, title="f1_max"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("rmse",          size=9, dec= 5, title="rmse"),

@@ -9,6 +9,29 @@ non_linearities = {
     "tanh": nn.Tanh,
 }
 
+class Scaling(torch.nn.Module):
+    """
+    Elementwise scaling layer
+    features    size
+    bias        wether to add bias
+    """
+    def __init__(self, features, bias=True):
+        super(Scaling, self).__init__()
+        self.weight = nn.Parameter(torch.ones(features))
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(features))
+        else:
+            self.register_parameter('bias', None)
+
+    def forward(self, input):
+        out = input * self.weight 
+        if self.bias is not None:
+            return out + self.bias
+        return out
+
+    def GetRegularizer(self):
+        return torch.norm((self.weight - 1))
+
 class SparseLinear(torch.nn.Module):
     """
     Linear layer with sparse input tensor, and dense output.
@@ -124,9 +147,37 @@ class MiddleNet(torch.nn.Module):
     def forward(self, H):
         return self.net(H)
 
-class LastNet(torch.nn.Module):
-    def __init__(self, conf, extra_input_size=0):
+class CatLastNet(torch.nn.Module):
+    def __init__(self, conf):
         super().__init__()
+        self.non_linearity = conf.last_non_linearity
+        non_linearity = non_linearities[conf.last_non_linearity]
+        self.net = nn.Sequential(
+              non_linearity(),
+              nn.Dropout(conf.last_dropout),
+              nn.Linear(conf.hidden_sizes[-1], conf.cat_id_size),
+        )
+
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if type(m) == nn.Linear:
+            torch.nn.init.xavier_uniform_(m.weight, gain=torch.nn.init.calculate_gain("sigmoid"))
+            if m.bias is not None:
+                m.bias.data.fill_(0.1)
+
+    def forward(self, H):
+        return self.net(H)
+
+class LastNet(torch.nn.Module):
+    def __init__(self, conf, extra_input_size=0, output_size = None, last_non_linearity = None):
+        super().__init__()
+
+        if last_non_linearity is None:
+            last_non_linearity = conf.last_non_linearity
+        if output_size is None:
+            output_size = conf.output_size
+
         if conf.last_hidden_sizes is None:
             last_hidden_sizes = []
         else:
@@ -136,28 +187,28 @@ class LastNet(torch.nn.Module):
            self.net = nn.Sequential()
            output_size_initial = conf.last_hidden_sizes[0]
            self.net.add_module(f"initial_layer", nn.Sequential(
-               non_linearities[conf.last_non_linearity](),
+               non_linearities[last_non_linearity](),
                nn.Dropout(conf.middle_dropout),
                nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size_initial),
            ))
            for i in range(len(conf.last_hidden_sizes) - 1):
                self.net.add_module(f"layer_{i}", nn.Sequential(
-                   non_linearities[conf.last_non_linearity](),
+                   non_linearities[last_non_linearity](),
                    nn.Dropout(conf.last_dropout),
                    nn.Linear(conf.last_hidden_sizes[i], conf.last_hidden_sizes[i+1], bias=True),
                ))
            self.net.add_module(f"last_layer", nn.Sequential(
-                non_linearities[conf.last_non_linearity](),
+                non_linearities[last_non_linearity](),
                 nn.Dropout(conf.last_dropout),
-                nn.Linear(conf.last_hidden_sizes[-1], conf.output_size),
+                nn.Linear(conf.last_hidden_sizes[-1], output_size),
             ))
         else:
-          self.non_linearity = conf.last_non_linearity
-          non_linearity = non_linearities[conf.last_non_linearity]
+          self.non_linearity = last_non_linearity
+          non_linearity = non_linearities[last_non_linearity]
           self.net = nn.Sequential(
               non_linearity(),
               nn.Dropout(conf.last_dropout),
-              nn.Linear(conf.hidden_sizes[-1]+extra_input_size, conf.output_size),
+              nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size),
           )
 
         self.apply(self.init_weights)
@@ -180,26 +231,73 @@ class SparseFFN(torch.nn.Module):
         else:
             self.class_output_size = None
             self.regr_output_size  = None
+        if conf.enable_cat_fusion == 1:
+            self.cat_fusion = 1
+            if hasattr(conf, "cat_id_size"):
+               self.cat_id_size = conf.cat_id_size
+            else:
+               setattr(conf, "cat_id_size", 0)
+               self.cat_id_size = 0
+            self.trunk = nn.Sequential(
+                    SparseInputNet(conf),
+                    MiddleNet(conf),
+            )
+            self.priv_head = LastNet(conf)
+            self.cat_head  = CatLastNet(conf)
+        else:
+            self.cat_id_size = None
+            self.cat_fusion = 0
+            self.net = nn.Sequential(
+                SparseInputNet(conf),
+                MiddleNet(conf),
+               # LastNet(conf), #made it separate
+            )
 
-        self.net = nn.Sequential(
-            SparseInputNet(conf),
-            MiddleNet(conf),
-            LastNet(conf),
-        )
+        self.scaling = None #Scaling(conf.hidden_sizes[-1])
+        if self.cat_fusion == 0:
+           if self.class_output_size is None or self.regr_output_size is None:
+               raise ValueError("Both regression and classification tergets are needed for hybrid mode")
+           self.classLast = LastNet(conf, output_size = conf.class_output_size, last_non_linearity = 'relu') #Override output size
+           if conf.scaling_regularizer == np.inf:
+               self.regrLast  =  nn.Sequential(
+                       LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
+                       )
+           else:
+               self.scaling = Scaling(conf.hidden_sizes[-1])
+               self.regrLast  =  nn.Sequential(
+                       self.scaling,
+                       LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
+                      )
+               self.scaling_regularizer = conf.scaling_regularizer
+
+
+    def GetRegularizer(self):
+        if self.scaling is not None:
+            return self.scaling_regularizer * self.scaling.GetRegularizer()
+        else:
+            return 0;
 
     @property
     def has_2heads(self):
         return self.class_output_size is not None
 
     def forward(self, X, last_hidden=False):
-        if last_hidden:
-            H = self.net[:-1](X)
-            return self.net[-1].net[:-1](H)
-        out = self.net(X)
-        if self.class_output_size is None:
-            return out
+        if self.cat_fusion == 1:
+            if last_hidden:
+               H = self.net[:-1](X)
+               return self.net[-1].net[:-1](H)
+            out_trunk = self.trunk(X)
+            out_priv_head = self.priv_head(out_trunk)
+            out_cat_head  = self.cat_head(out_trunk)
+            return out_priv_head[:, :self.class_output_size], out_priv_head[:, self.class_output_size:], out_cat_head
+        else:
+            if last_hidden:
+                raise ValueError("Last_hidden is not supported for hybrid mode")
+            out = self.net(X)
+     #      if self.class_output_size is None:
+     #          return out
         ## splitting to class and regression
-        return out[:, :self.class_output_size], out[:, self.class_output_size:]
+            return self.classLast(out), self.regrLast(out)
 
 class SparseFFN_combined(nn.Module):
   def __init__(self, conf, shared_trunk, local_trunk, head):

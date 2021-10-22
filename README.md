@@ -5,4 +5,5 @@ Especially, we support very high-dimensional models with sparse inputs, *e.g.*, 
 - The general documentation can be found [here](docs/main.md).
 - Documentation about how to retrain a pretrained model can be found [here](docs/local_trunk.md).
 - Documentation about how to profile GPU memory usage and use mixed precision can be found [here](docs/memprofile.md).
+- Documentation about how to use Catalogue Fusion can be found [here](docs/catalogue_fusion.md).
 

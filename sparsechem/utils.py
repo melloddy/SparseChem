@@ -148,20 +148,22 @@ def calc_acc_kappa(recall, fpr, num_pos, num_neg):
     kappa = (acc - pexp) / (1 - pexp)
     return acc, kappa
 
-def all_metrics(y_true, y_score):
+def all_metrics(y_true, y_score, cal_fact_aucpr_task):
     """Compute classification metrics.
     Args:
         y_true     true labels (0 / 1)
         y_score    logit values
     """
     if len(y_true) <= 1 or (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan], "auc_pr_cal": [np.nan]})
         return df
 
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
     roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
     precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
+    precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
 
+    #import ipdb; ipdb.set_trace()
     bceloss = F.binary_cross_entropy_with_logits(
         input  = torch.FloatTensor(y_score),
         target = torch.FloatTensor(y_true),
@@ -176,6 +178,7 @@ def all_metrics(y_true, y_score):
     p_f1_max       = scipy.special.expit(pr_thresholds[f1_max_idx])
 
     auc_pr = sklearn.metrics.auc(x = recall, y = precision)
+    auc_pr_cal = sklearn.metrics.auc(x = recall, y = precision_cal)
     avg_prec_score = sklearn.metrics.average_precision_score(
           y_true  = y_true,
           y_score = y_score)
@@ -188,7 +191,7 @@ def all_metrics(y_true, y_score):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal]})
     return df
 
 def compute_corr(x, y):
@@ -225,7 +228,7 @@ def all_metrics_regr(y_true, y_score, y_censor=None):
     })
     return df
 
-def compute_metrics(cols, y_true, y_score, num_tasks):
+def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
     if len(cols) < 1:
         return pd.DataFrame({
             "roc_auc_score": np.nan,
@@ -241,7 +244,8 @@ def compute_metrics(cols, y_true, y_score, num_tasks):
     metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
-                  y_score = g.y_score.values))
+                  y_score = g.y_score.values,
+                  cal_fact_aucpr_task = cal_fact_aucpr[g['task'].values[0]]))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
@@ -283,11 +287,12 @@ def class_fold_counts(y_class, folding):
 def print_metrics(epoch, train_time, metrics_tr, metrics_va, header):
     if metrics_tr is None:
         if header:
-            print("Epoch\tlogl_va |  auc_va | aucpr_va | maxf1_va | tr_time")
+            print("Epoch\tlogl_va |  auc_va | aucpr_va | aucpr_cal_va | maxf1_va | tr_time")
         output_fstr = (
             f"{epoch}.\t{metrics_va['logloss']:.5f}"
             f" | {metrics_va['roc_auc_score']:.5f}"
             f" |  {metrics_va['auc_pr']:.5f}"
+            f" |  {metrics_va['auc_pr_cal']:.5f}"
             f" |  {metrics_va['f1_max']:.5f}"
             f" | {train_time:6.1f}"
         )
@@ -318,6 +323,7 @@ columns_cr = [
     Column("bceloss",       size=8, dec= 5, title="bceloss"),
     Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
     Column("auc_pr",        size=8, dec= 5, title="aucpr"),
+    Column("auc_pr_cal",    size=9, dec= 5, title="aucpr_cal"),
     Column("f1_max",        size=8, dec= 5, title="f1_max"),
     Column(None,            size=1, dec=-1, title="|"),
     Column("rmse",          size=9, dec= 5, title="rmse"),
@@ -444,14 +450,16 @@ def train_binary(net, optimizer, loader, loss, dev, task_weights, normalize_loss
         optimizer.step()
     return logloss_sum / logloss_count
 
-def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None):
+def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weights_regr, censored_weight=[], dev="cpu", normalize_inv=None, y_cat_columns=None):
     """returns full outputs from the network for the batch b"""
     X = torch.sparse_coo_tensor(
         b["x_ind"],
         b["x_data"],
         size = [b["batch_size"], input_size]).to(dev, non_blocking=True)
-
-    yc_hat_all, yr_hat_all = net(X)
+    if net.cat_id_size is None:
+        yc_hat_all, yr_hat_all = net(X)
+    else:
+        yc_hat_all, yr_hat_all, ycat_hat_all = net(X)
     if normalize_inv is not None:
        #inverse normalization
        yr_hat_all = inverse_normalization(yr_hat_all, normalize_inv["mean"], normalize_inv["var"], dev).to(dev)
@@ -462,7 +470,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
     out["yr_loss"]    = 0
     out["yc_weights"] = 0
     out["yr_weights"] = 0
-
+    out["yc_cat_loss"] = 0 
     if net.class_output_size > 0:
         yc_ind  = b["yc_ind"].to(dev, non_blocking=True)
         yc_w    = weights_class[yc_ind[1]]
@@ -474,6 +482,15 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
         out["yc_loss"] = (loss_class(yc_hat, yc_data) * yc_w).sum()
         out["yc_weights"] = yc_w.sum()
 
+        if net.cat_id_size is not None and net.cat_id_size > 0:
+            yc_cat_ind = b["yc_cat_ind"].to(dev, non_blocking=True)
+            yc_cat_data = b["yc_cat_data"].to(dev, non_blocking=True)
+            yc_cat_hat = ycat_hat_all[yc_cat_ind[0], yc_cat_ind[1]]
+            if y_cat_columns is not None:
+               yc_hat_all[:,y_cat_columns] = ycat_hat_all
+               yc_hat  = yc_hat_all[yc_ind[0], yc_ind[1]]
+               out["yc_hat"]  = yc_hat
+            out["yc_cat_loss"] = loss_class(yc_cat_hat, yc_cat_data).sum() 
     if net.regr_output_size > 0:
         yr_ind  = b["yr_ind"].to(dev, non_blocking=True)
         yr_w    = weights_regr[yr_ind[1]]
@@ -501,6 +518,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
                      normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None):
+
     net.train()
 
     int_count = 0
@@ -526,7 +544,8 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                    with redirect_stdout(profile_file):
                         profile_file.write(f"\nForward pass model detailed report:\n\n")
                         reporter.report()
-        loss = fwd["yc_loss"] + fwd["yr_loss"]
+        loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"] + net.GetRegularizer()]
+
         loss_norm = loss / norm
              #loss_norm.backward()
         if mixed_precision:
@@ -564,7 +583,7 @@ def aggregate_results(df, weights):
     df2 = df.where(pd.isnull, 1) * weights[:,None]
     return (df2.multiply(1.0 / df2.sum(axis=0), axis=1) * df).sum(axis=0)
 
-def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None):
+def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None, cal_fact_aucpr=1):
     class_w = tasks_class.aggregation_weight
     regr_w  = tasks_regr.aggregation_weight
 
@@ -587,7 +606,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
 
     with torch.no_grad():
         for b in tqdm(loader, leave=False, disable=(progress == False)):
-            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev, normalize_inv=normalize_inv)
+            fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=tasks_class.training_weight, weights_regr=tasks_regr.training_weight, dev=dev, normalize_inv=normalize_inv, y_cat_columns=loader.dataset.y_cat_columns)
             loss_class_sum += fwd["yc_loss"]
             loss_regr_sum  += fwd["yr_loss"]
             loss_class_weights += fwd["yc_weights"]
@@ -608,7 +627,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
             yc_ind  = torch.cat(data["yc_ind"], dim=1).numpy()
             yc_data = torch.cat(data["yc_data"], dim=0).numpy()
             yc_hat  = torch.cat(data["yc_hat"], dim=0).numpy()
-            out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks)
+            out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr)
             out["classification_agg"] = aggregate_results(out["classification"], weights=class_w)
             out["classification_agg"]["logloss"] = loss_class_sum.cpu().item() / loss_class_weights.cpu().item()
 
@@ -640,7 +659,7 @@ def enable_dropout(m):
     if type(m) == torch.nn.Dropout:
         m.train()
 
-def predict(net, loader, dev, progress=True, dropout=False):
+def predict(net, loader, dev, progress=True, dropout=False, y_cat_columns=None):
     """
     Makes predictions for all compounds in the loader.
     """
@@ -657,7 +676,12 @@ def predict(net, loader, dev, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            y_class, y_regr = net(X)
+            if net.cat_id_size is None:
+                y_class, y_regr = net(X)
+            else:
+                y_class, y_regr, yc_cat = net(X)
+                if y_cat_columns is not None:
+                   y_class[:,y_cat_columns] = yc_cat
             y_class_list.append(torch.sigmoid(y_class).cpu())
             y_regr_list.append(y_regr.cpu())
 
@@ -725,7 +749,7 @@ class SparseCollector(object):
         return csr_matrix((y_hat.numpy(), (y_row, y_col)), shape=shape)
 
 
-def predict_sparse(net, loader, dev, progress=True, dropout=False):
+def predict_sparse(net, loader, dev, progress=True, dropout=False, y_cat_columns=None):
     """
     Makes predictions for the Y values in loader.
     Returns sparse matrix of the shape loader.dataset.y.
@@ -744,7 +768,12 @@ def predict_sparse(net, loader, dev, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            yc, yr = net(X)
+            if net.cat_id_size is None:
+                yc, yr = net(X)
+            else:
+                yc, yr, yc_cat = net(X)
+                if y_cat_columns is not None:
+                   yc[:,y_cat_columns] = yc_cat
             class_collector.append(b, yc)
             regr_collector.append(b, yr)
 
@@ -827,7 +856,7 @@ def load_task_weights(filename, y, label):
         aggregation_weight
         task_type
     """
-    res = types.SimpleNamespace(training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor())
+    res = types.SimpleNamespace(task_id=None, training_weight=None, aggregation_weight=None, task_type=None, censored_weight=torch.FloatTensor(), cat_id=None)
     if y is None:
         assert filename is None, f"Weights provided for {label}, please add also --{label}"
         res.training_weight = torch.ones(0)
@@ -847,7 +876,7 @@ def load_task_weights(filename, y, label):
     df.sort_values("task_id", inplace=True)
 
     for col in df.columns:
-        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight"]
+        cols = ["", "task_id", "training_weight", "aggregation_weight", "task_type", "censored_weight","catalog_id"]
         assert col in cols, f"Unsupported colum '{col}' in task weight file. Supported columns: {cols}."
 
     assert y.shape[1] == df.shape[0], f"task weights for '{label}' have different size ({df.shape[0]}) to {label} columns ({y.shape[1]})."
@@ -859,6 +888,7 @@ def load_task_weights(filename, y, label):
     assert (df.task_id < df.shape[0]).all(), f"task ids in task weights (for {label}) must be below number of tasks"
 
     res.training_weight = torch.FloatTensor(df.training_weight.values)
+    res.task_id = df.task_id.values
     if "aggregation_weight" in df:
         assert (0 <= df.aggregation_weight).all(), f"Found negative aggregation_weight for {label}. Aggregation weights must be non-negative."
         res.aggregation_weight = df.aggregation_weight.values
@@ -867,6 +897,8 @@ def load_task_weights(filename, y, label):
     if "censored_weight" in df:
         assert (0 <= df.censored_weight).all(), f"Found negative censored_weight for {label}. Censored weights must be non-negative."
         res.censored_weight = torch.FloatTensor(df.censored_weight.values)
+    if "catalog_id" in df:
+        res.cat_id = df.catalog_id.values
 
     return res
 

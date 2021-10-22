@@ -544,7 +544,7 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                    with redirect_stdout(profile_file):
                         profile_file.write(f"\nForward pass model detailed report:\n\n")
                         reporter.report()
-        loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"] + net.GetRegularizer()]
+        loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"] + net.GetRegularizer()
 
         loss_norm = loss / norm
              #loss_norm.backward()

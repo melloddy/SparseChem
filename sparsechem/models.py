@@ -48,7 +48,8 @@ class SparseLinear(torch.nn.Module):
             self.register_parameter('bias', None)
 
     def forward(self, input):
-        out = torch.mm(input, self.weight)
+        with torch.cuda.amp.autocast(enabled=False):
+            out = torch.mm(input, self.weight)
         if self.bias is not None:
             return out + self.bias
         return out

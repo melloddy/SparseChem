@@ -12,9 +12,12 @@ import json
 import warnings
 import math
 import torch.nn.functional as F
+import csv
+from contextlib import redirect_stdout
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 from scipy.sparse import csr_matrix
+from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
 
 class Nothing(object):
     def __getattr__(self, name):
@@ -31,6 +34,49 @@ class Nothing(object):
         return Nothing()
     def __repr__(self):
         return "Nothing"
+
+
+# Control downsampling: how many scalar data do we keep for each run/tag
+# combination?
+SIZE_GUIDANCE = {'scalars': 10000}
+
+
+def extract_scalars(multiplexer, run, tag):
+  """Extract tabular data from the scalars at a given run and tag.
+  The result is a list of 3-tuples (wall_time, step, value).
+  """
+  tensor_events = multiplexer.Tensors(run, tag)
+  return [
+     # (event.wall_time, event.step, tf.make_ndarray(event.tensor_proto).item())
+      (event.wall_time, event.step, event.tensor_proto.float_val[0])
+      for event in tensor_events
+  ]
+
+
+def create_multiplexer(logdir):
+  multiplexer = event_multiplexer.EventMultiplexer(
+      tensor_size_guidance=SIZE_GUIDANCE)
+  multiplexer.AddRunsFromDirectory(logdir)
+  multiplexer.Reload()
+  return multiplexer
+
+
+def export_scalars(multiplexer, run, tag, filepath, write_headers=True):
+  data = extract_scalars(multiplexer, run, tag)
+  with open(filepath, 'w') as outfile:
+    writer = csv.writer(outfile)
+    if write_headers:
+      writer.writerow(('wall_time', 'step', 'value'))
+    for row in data:
+      writer.writerow(row)
+
+def return_max_val(data):
+    max_val = 0
+    for row in data:
+        if row[2] > max_val:
+            max_val = row[2]
+    return max_val
+
 
 def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
     if array==False:
@@ -470,11 +516,14 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
-                     weights_class, weights_regr, censored_weight, 
-                     normalize_loss=None, num_int_batches=1, progress=True):
+                     weights_class, weights_regr, censored_weight,
+                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None):
+
     net.train()
 
     int_count = 0
+    batch_count = 0
+    #scaler = torch.cuda.amp.GradScaler()
     for b in tqdm(loader, leave=False, disable=(progress == False)):
         if int_count == 0:
             optimizer.zero_grad()
@@ -482,20 +531,48 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         norm = normalize_loss
         if norm is None:
             norm = b["batch_size"] * num_int_batches
-
-        fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
+        if args.mixed_precision == 1:
+            mixed_precision = True
+        else:
+            mixed_precision = False
+        with torch.cuda.amp.autocast(enabled=mixed_precision):
+             fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
+        if writer is not None and reporter is not None:
+            writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+            if batch_count == 1:
+                with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+                   with redirect_stdout(profile_file):
+                        profile_file.write(f"\nForward pass model detailed report:\n\n")
+                        reporter.report()
         loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"] + net.GetRegularizer()
-        loss_norm = loss / norm
-        loss_norm.backward()
 
+        loss_norm = loss / norm
+             #loss_norm.backward()
+        if mixed_precision:
+           scaler.scale(loss_norm).backward()
+        else:
+           loss_norm.backward()
+        if writer is not None and reporter is not None:
+                writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
         int_count += 1
         if int_count == num_int_batches:
-            optimizer.step()
-            int_count = 0
+           if mixed_precision and not isinstance(optimizer,Nothing):
+               scaler.step(optimizer)
+               scaler.update()
+           else:
+               optimizer.step()
+           if writer is not None and reporter is not None:
+                   writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
+           int_count = 0
+           batch_count+=1
 
     if int_count > 0:
         ## process tail batch (should not happen)
-        optimizer.step()
+        if mixed_precision and not isinstance(optimizer,Nothing):
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
 
 
 def aggregate_results(df, weights):

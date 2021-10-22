@@ -12,10 +12,14 @@ import os.path
 import time
 import json
 import functools
+import csv
+#from apex import amp
+from contextlib import redirect_stdout
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
+from pytorch_memlab import MemReporter
 import multiprocessing
 multiprocessing.set_start_method('fork', force=True)
 
@@ -62,6 +66,8 @@ parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
+parser.add_argument("--profile", help="Set this to 1 to output memory profile information", type=int, default=0)
+parser.add_argument("--mixed_precision", help="Set this to 1 to run in mixed precision mode (vs single precision)", type=int, default=0)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--enable_cat_fusion", help="Set this to 1 to enable catalogue fusion", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
@@ -82,8 +88,12 @@ else:
     name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    if args.mixed_precision == 1:
+        name += f"_mixed_precision"
 vprint(f"Run name is '{name}'.")
 
+if args.profile == 1:
+    assert (args.save_board==1), "Tensorboard should be enabled to be able to profile memory usage."
 if args.save_board:
     tb_name = os.path.join(args.output_dir, "boards", name)
     writer  = SummaryWriter(tb_name)
@@ -117,7 +127,7 @@ tasks_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
 
 ## Input transformation
 ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=args.input_transform)
-
+print(f"count non zero:{ecfp[0].count_nonzero()}")
 num_pos    = np.array((y_class == +1).sum(0)).flatten()
 num_neg    = np.array((y_class == -1).sum(0)).flatten()
 num_class  = np.array((y_class != 0).sum(0)).flatten()
@@ -235,12 +245,23 @@ tasks_regr.censored_weight  = tasks_regr.censored_weight.to(dev)
 
 vprint("Network:")
 vprint(net)
+reporter = None
+if args.profile == 1:
+   #####   output saving   #####
+   if not os.path.exists(args.output_dir):
+       os.makedirs(args.output_dir)
 
+   reporter = MemReporter(net)
+
+   with open(f"{args.output_dir}/memprofile.txt", "w+") as profile_file:
+        with redirect_stdout(profile_file):
+             profile_file.write(f"\nInitial model detailed report:\n\n")
+             reporter.report()
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
 num_prints = 0
-
+scaler = torch.cuda.amp.GradScaler()
 for epoch in range(args.epochs):
     t0 = time.time()
     sc.train_class_regr(
@@ -254,11 +275,20 @@ for epoch in range(args.epochs):
         censored_weight = tasks_regr.censored_weight,
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
-        progress        = args.verbose >= 2
-        )
+        progress        = args.verbose >= 2,
+        reporter = reporter,
+        writer = writer,
+        epoch = epoch,
+        args = args,
+        scaler = scaler)
+
+    if args.profile == 1:
+       with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+            profile_file.write(f"\nAfter epoch {epoch} model detailed report:\n\n")
+            with redirect_stdout(profile_file):
+                 reporter.report()
 
     t1 = time.time()
-
     eval_round = (args.eval_frequency > 0) and ((epoch + 1) % args.eval_frequency == 0)
     last_round = epoch == args.epochs - 1
 
@@ -289,6 +319,11 @@ for epoch in range(args.epochs):
 
 writer.close()
 vprint()
+if args.profile == 1:
+   multiplexer = sc.create_multiplexer(tb_name)
+#   sc.export_scalars(multiplexer, '.', "GPUmem", "testcsv.csv")
+   data = sc.extract_scalars(multiplexer, '.', "GPUmem")
+   vprint(f"Peak GPU memory used: {sc.return_max_val(data)}MB")
 vprint("Saving performance metrics (AUCs) and model.")
 
 #####   model saving   #####

@@ -38,6 +38,7 @@ parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluatio
 parser.add_argument("--inverse_normalization", help="If set to 1 enables inverse normalization given means and variances from config file", type=int, default=0)
 parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, training_weight, aggregation_weight, task_type (for classification tasks)", type=str, default=None)
 parser.add_argument("--dev", help="Device to use (default cuda:0)", type=str, default="cuda:0")
+parser.add_argument("--num_workers", help="Number of workers for DataLoader", type=int, default=4)
 
 args = parser.parse_args()
 
@@ -110,7 +111,7 @@ if args.folding is not None:
     y_regr  = sc.keep_row_data(y_regr, keep)
 
 dataset_te = sc.ClassRegrSparseDataset(x=x, y_class=y_class, y_regr=y_regr)
-loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = 4, pin_memory=True, collate_fn=dataset_te.collate)
+loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = args.num_workers, pin_memory=True, collate_fn=dataset_te.collate)
 
 if args.last_hidden:
     ## saving only hidden layer

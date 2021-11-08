@@ -620,7 +620,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
         out = {}
         if len(data["yc_ind"]) == 0:
             ## there are no data for classification
-            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks)
+            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr)
             out["classification_agg"] = out["classification"].reindex(labels=[]).mean(0)
             out["classification_agg"]["logloss"] = np.nan
         else:

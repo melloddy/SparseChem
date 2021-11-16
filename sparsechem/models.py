@@ -300,12 +300,7 @@ class SparseFFN(torch.nn.Module):
      #      if self.class_output_size is None:
      #          return out
         ## splitting to class and regression
-<<<<<<< sparsechem/models.py
-
-        return self.classLast(out * self.classmask), self.regrLast(out * self.regmask)
-=======
-            return self.classLast(out), self.regrLast(out)
->>>>>>> sparsechem/models.py
+            return self.classLast(out * self.classmask), self.regrLast(out * self.regmask)
 
 class SparseFFN_combined(nn.Module):
   def __init__(self, conf, shared_trunk, local_trunk, head):

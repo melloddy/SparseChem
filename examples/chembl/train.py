@@ -12,10 +12,14 @@ import os.path
 import time
 import json
 import functools
+import csv
+#from apex import amp
+from contextlib import redirect_stdout
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
+from pytorch_memlab import MemReporter
 import multiprocessing
 multiprocessing.set_start_method('fork', force=True)
 
@@ -51,6 +55,7 @@ parser.add_argument("--lr_steps", nargs="+", help="Learning rate decay steps", t
 parser.add_argument("--input_size_freq", help="Number of high importance features", type=int, default=None)
 parser.add_argument("--fold_inputs", help="Fold input to a fixed set (default no folding)", type=int, default=None)
 parser.add_argument("--epochs", help="Number of epochs", type=int, default=20)
+parser.add_argument("--pi_zero", help="Reference class ratio to be used for calibrated aucpr", type=float, default=0.1)
 parser.add_argument("--min_samples_class", help="Minimum number samples in each class and in each fold for AUC calculation (only used if aggregation_weight is not provided in --weights_class)", type=int, default=5)
 parser.add_argument("--min_samples_auc", help="Obsolete: use 'min_samples_class'", type=int, default=None)
 parser.add_argument("--min_samples_regr", help="Minimum number of uncensored samples in each fold for regression metric calculation (only used if aggregation_weight is not provided in --weights_regr)", type=int, default=10)
@@ -61,7 +66,10 @@ parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type
 parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
 parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
 parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
+parser.add_argument("--profile", help="Set this to 1 to output memory profile information", type=int, default=0)
+parser.add_argument("--mixed_precision", help="Set this to 1 to run in mixed precision mode (vs single precision)", type=int, default=0)
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
+parser.add_argument("--enable_cat_fusion", help="Set this to 1 to enable catalogue fusion", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
 #hybrid model features
 parser.add_argument("--regression_weight", help="between 0 and 1 relative weight of regression loss vs classification loss", type=float, default=0.5)
@@ -115,8 +123,12 @@ else:
     name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo_r{'.'.join([str(d) for d in args.dropouts_reg])}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
+    if args.mixed_precision == 1:
+        name += f"_mixed_precision"
 vprint(f"Run name is '{name}'.")
 
+if args.profile == 1:
+    assert (args.save_board==1), "Tensorboard should be enabled to be able to profile memory usage."
 if args.save_board:
     tb_name = os.path.join(args.output_dir, "boards", name)
     writer  = SummaryWriter(tb_name)
@@ -150,7 +162,7 @@ tasks_regr  = sc.load_task_weights(args.weights_regr, y=y_regr, label="y_regr")
 
 ## Input transformation
 ecfp = sc.fold_transform_inputs(ecfp, folding_size=args.fold_inputs, transform=args.input_transform)
-
+print(f"count non zero:{ecfp[0].count_nonzero()}")
 num_pos    = np.array((y_class == +1).sum(0)).flatten()
 num_neg    = np.array((y_class == -1).sum(0)).flatten()
 num_class  = np.array((y_class != 0).sum(0)).flatten()
@@ -219,7 +231,10 @@ if args.normalize_regression == 1 and args.normalize_regr_va == 0:
 num_pos_va  = np.array((y_class_va == +1).sum(0)).flatten()
 num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
-
+pos_rate = num_pos_va/(num_pos_va+num_neg_va)
+pos_rate_ref = args.pi_zero
+cal_fact_aucpr = pos_rate*(1-pos_rate_ref)/(pos_rate_ref*(1-pos_rate))
+#import ipdb; ipdb.set_trace()
 batch_size  = int(np.ceil(args.batch_ratio * idx_tr.shape[0]))
 num_int_batches = 1
 
@@ -229,8 +244,18 @@ if args.internal_batch_max is not None:
         batch_size      = int(np.ceil(batch_size / num_int_batches))
 vprint(f"#internal batch size:   {batch_size}")
 
-dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr, y_censor=y_censor_tr)
-dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va, y_censor=y_censor_va)
+tasks_cat_id_list = None
+select_cat_ids = None
+if tasks_class.cat_id is not None:
+    tasks_cat_id_list = [[x,i] for i,x in enumerate(tasks_class.cat_id) if str(x) != 'nan']
+    tasks_cat_ids = [i for i,x in enumerate(tasks_class.cat_id) if str(x) != 'nan']
+    select_cat_ids = np.array(tasks_cat_ids)
+    cat_id_size = len(tasks_cat_id_list)
+else:
+    cat_id_size = 0
+
+dataset_tr = sc.ClassRegrSparseDataset(x=ecfp[idx_tr], y_class=y_class_tr, y_regr=y_regr_tr, y_censor=y_censor_tr, y_cat_columns=select_cat_ids)
+dataset_va = sc.ClassRegrSparseDataset(x=ecfp[idx_va], y_class=y_class_va, y_regr=y_regr_va, y_censor=y_censor_va, y_cat_columns=select_cat_ids)
 
 loader_tr = DataLoader(dataset_tr, batch_size=batch_size, num_workers = 8, pin_memory=True, collate_fn=dataset_tr.collate, shuffle=True)
 loader_va = DataLoader(dataset_va, batch_size=batch_size, num_workers = 4, pin_memory=True, collate_fn=dataset_va.collate, shuffle=False)
@@ -240,6 +265,7 @@ args.output_size = dataset_tr.output_size
 
 args.class_output_size = dataset_tr.class_output_size
 args.regr_output_size  = dataset_tr.regr_output_size
+args.cat_id_size = cat_id_size
 
 dev  = torch.device(args.dev)
 net  = sc.SparseFFN(args).to(dev)
@@ -254,12 +280,23 @@ tasks_regr.censored_weight  = tasks_regr.censored_weight.to(dev)
 
 vprint("Network:")
 vprint(net)
+reporter = None
+if args.profile == 1:
+   #####   output saving   #####
+   if not os.path.exists(args.output_dir):
+       os.makedirs(args.output_dir)
 
+   reporter = MemReporter(net)
+
+   with open(f"{args.output_dir}/memprofile.txt", "w+") as profile_file:
+        with redirect_stdout(profile_file):
+             profile_file.write(f"\nInitial model detailed report:\n\n")
+             reporter.report()
 optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
 num_prints = 0
-
+scaler = torch.cuda.amp.GradScaler()
 for epoch in range(args.epochs):
     t0 = time.time()
     sc.train_class_regr(
@@ -274,15 +311,25 @@ for epoch in range(args.epochs):
         normalize_loss  = args.normalize_loss,
         num_int_batches = num_int_batches,
         progress        = args.verbose >= 2,
-        )
+        reporter = reporter,
+        writer = writer,
+        epoch = epoch,
+        args = args,
+        scaler = scaler)
+
+    if args.profile == 1:
+       with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+            profile_file.write(f"\nAfter epoch {epoch} model detailed report:\n\n")
+            with redirect_stdout(profile_file):
+                 reporter.report()
 
     t1 = time.time()
-
     eval_round = (args.eval_frequency > 0) and ((epoch + 1) % args.eval_frequency == 0)
     last_round = epoch == args.epochs - 1
 
     if eval_round or last_round:
-        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv)
+        results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv, cal_fact_aucpr=cal_fact_aucpr)
+   #     import ipdb; ipdb.set_trace()
         for key, val in results_va["classification_agg"].items():
             writer.add_scalar(key+"/va", val, epoch)
         for key, val in results_va["regression_agg"].items():
@@ -311,6 +358,11 @@ for epoch in range(args.epochs):
 #print (f"overlap: {(net.regmask * net.classmask).sum()}")
 writer.close()
 vprint()
+if args.profile == 1:
+   multiplexer = sc.create_multiplexer(tb_name)
+#   sc.export_scalars(multiplexer, '.', "GPUmem", "testcsv.csv")
+   data = sc.extract_scalars(multiplexer, '.', "GPUmem")
+   vprint(f"Peak GPU memory used: {sc.return_max_val(data)}MB")
 vprint("Saving performance metrics (AUCs) and model.")
 
 #####   model saving   #####

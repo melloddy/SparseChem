@@ -241,7 +241,7 @@ def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
             "p_kappa_max": np.nan,
             "bceloss": np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
-    if hasattr(cal_fact_aucp, "__len__"):
+    if hasattr(cal_fact_aucpr, "__len__"):
         metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,

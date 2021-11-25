@@ -241,7 +241,14 @@ def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
             "p_kappa_max": np.nan,
             "bceloss": np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
-    metrics = df.groupby("task", sort=True).apply(lambda g:
+    if cal_fact_aucpr == 1:
+        metrics = df.groupby("task", sort=True).apply(lambda g:
+              all_metrics(
+                  y_true  = g.y_true.values,
+                  y_score = g.y_score.values,
+                  cal_fact_aucpr_task = 1.0))
+    else:
+        metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values,

@@ -1,4 +1,6 @@
 # Copyright (c) 2020 KU Leuven
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 import sparsechem as sc
 import scipy.io
 import scipy.sparse
@@ -21,6 +23,9 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
 from pytorch_memlab import MemReporter
 import multiprocessing
+from pynvml import *
+nvmlInit()
+
 multiprocessing.set_start_method('fork', force=True)
 
 
@@ -281,6 +286,16 @@ tasks_regr.censored_weight  = tasks_regr.censored_weight.to(dev)
 vprint("Network:")
 vprint(net)
 reporter = None
+h = None
+if args.profile == 1:
+   torch_gpu_id = torch.cuda.current_device()
+   if "CUDA_VISIBLE_DEVICES" in os.environ:
+      ids = list(map(int, os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")))
+      nvml_gpu_id = ids[torch_gpu_id] # remap
+   else:
+      nvml_gpu_id = torch_gpu_id
+   h = nvmlDeviceGetHandleByIndex(nvml_gpu_id)
+
 if args.profile == 1:
    #####   output saving   #####
    if not os.path.exists(args.output_dir):
@@ -315,7 +330,8 @@ for epoch in range(args.epochs):
         writer = writer,
         epoch = epoch,
         args = args,
-        scaler = scaler)
+        scaler = scaler,
+        nvml_handle = h)
 
     if args.profile == 1:
        with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:

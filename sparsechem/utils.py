@@ -161,9 +161,9 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task):
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
     roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
     precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
-    precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
-
-    #import ipdb; ipdb.set_trace()
+    with np.errstate(divide='ignore'):
+         #precision can be zero but can be ignored so disable warnings (divide by 0)
+         precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
     bceloss = F.binary_cross_entropy_with_logits(
         input  = torch.FloatTensor(y_score),
         target = torch.FloatTensor(y_true),

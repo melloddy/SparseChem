@@ -24,7 +24,9 @@ from torch.utils.tensorboard import SummaryWriter
 from pytorch_memlab import MemReporter
 import multiprocessing
 from pynvml import *
-nvmlInit()
+
+if torch.cuda.is_available():
+    nvmlInit()
 
 multiprocessing.set_start_method('fork', force=True)
 

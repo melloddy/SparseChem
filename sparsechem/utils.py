@@ -13,6 +13,7 @@ import warnings
 import math
 import torch.nn.functional as F
 import csv
+from pynvml import *
 from contextlib import redirect_stdout
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
@@ -524,7 +525,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
-                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None):
+                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None, nvml_handle=None):
 
     net.train()
 
@@ -545,7 +546,9 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         with torch.cuda.amp.autocast(enabled=mixed_precision):
              fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
         if writer is not None and reporter is not None:
-            writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+            info = nvmlDeviceGetMemoryInfo(nvml_handle)
+            #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+            writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
             if batch_count == 1:
                 with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
                    with redirect_stdout(profile_file):
@@ -560,7 +563,9 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         else:
            loss_norm.backward()
         if writer is not None and reporter is not None:
-                writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
+                info = nvmlDeviceGetMemoryInfo(nvml_handle)
+                #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
+                writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
         int_count += 1
         if int_count == num_int_batches:
            if mixed_precision and not isinstance(optimizer,Nothing):
@@ -569,7 +574,9 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
            else:
                optimizer.step()
            if writer is not None and reporter is not None:
-                   writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
+               info = nvmlDeviceGetMemoryInfo(nvml_handle)
+               #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
+               writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
            int_count = 0
            batch_count+=1
 

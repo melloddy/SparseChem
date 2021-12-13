@@ -13,6 +13,7 @@ import warnings
 import math
 import torch.nn.functional as F
 import csv
+from pynvml import *
 from contextlib import redirect_stdout
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
@@ -161,9 +162,9 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task):
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
     roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
     precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
-    precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
-
-    #import ipdb; ipdb.set_trace()
+    with np.errstate(divide='ignore'):
+         #precision can be zero but can be ignored so disable warnings (divide by 0)
+         precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
     bceloss = F.binary_cross_entropy_with_logits(
         input  = torch.FloatTensor(y_score),
         target = torch.FloatTensor(y_true),
@@ -241,11 +242,18 @@ def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
             "p_kappa_max": np.nan,
             "bceloss": np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
-    metrics = df.groupby("task", sort=True).apply(lambda g:
+    if hasattr(cal_fact_aucpr, "__len__"):
+        metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values,
                   cal_fact_aucpr_task = cal_fact_aucpr[g['task'].values[0]]))
+    else:
+        metrics = df.groupby("task", sort=True).apply(lambda g:
+              all_metrics(
+                  y_true  = g.y_true.values,
+                  y_score = g.y_score.values,
+                  cal_fact_aucpr_task = 1.0))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
@@ -517,7 +525,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
-                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None):
+                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None, nvml_handle=None):
 
     net.train()
 
@@ -538,7 +546,9 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         with torch.cuda.amp.autocast(enabled=mixed_precision):
              fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
         if writer is not None and reporter is not None:
-            writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+            info = nvmlDeviceGetMemoryInfo(nvml_handle)
+            #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+            writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
             if batch_count == 1:
                 with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
                    with redirect_stdout(profile_file):
@@ -553,7 +563,9 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
         else:
            loss_norm.backward()
         if writer is not None and reporter is not None:
-                writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
+                info = nvmlDeviceGetMemoryInfo(nvml_handle)
+                #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
+                writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
         int_count += 1
         if int_count == num_int_batches:
            if mixed_precision and not isinstance(optimizer,Nothing):
@@ -562,7 +574,9 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
            else:
                optimizer.step()
            if writer is not None and reporter is not None:
-                   writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
+               info = nvmlDeviceGetMemoryInfo(nvml_handle)
+               #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
+               writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
            int_count = 0
            batch_count+=1
 
@@ -620,7 +634,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
         out = {}
         if len(data["yc_ind"]) == 0:
             ## there are no data for classification
-            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks)
+            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr)
             out["classification_agg"] = out["classification"].reindex(labels=[]).mean(0)
             out["classification_agg"]["logloss"] = np.nan
         else:

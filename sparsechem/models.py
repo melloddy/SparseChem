@@ -133,7 +133,7 @@ class MiddleNet(torch.nn.Module):
         for i in range(len(conf.hidden_sizes) - 1):
             self.net.add_module(f"layer_{i}", nn.Sequential(
                 non_linearities[conf.middle_non_linearity](),
-                nn.Dropout(conf.middle_dropout),
+                nn.Dropout(conf.dropouts_trunk[i]),
                 nn.Linear(conf.hidden_sizes[i], conf.hidden_sizes[i+1], bias=True),
             ))
         self.apply(self.init_weights)
@@ -154,7 +154,7 @@ class CatLastNet(torch.nn.Module):
         non_linearity = non_linearities[conf.last_non_linearity]
         self.net = nn.Sequential(
               non_linearity(),
-              nn.Dropout(conf.last_dropout),
+              nn.Dropout(conf.dropouts_trunk[-1]),
               nn.Linear(conf.hidden_sizes[-1], conf.cat_id_size),
         )
 
@@ -170,7 +170,7 @@ class CatLastNet(torch.nn.Module):
         return self.net(H)
 
 class LastNet(torch.nn.Module):
-    def __init__(self, conf, extra_input_size=0, output_size = None, last_non_linearity = None):
+    def __init__(self, conf, extra_input_size=0, output_size = None, last_non_linearity = None, last_hidden_sizes = None, dropouts = None):
         super().__init__()
 
         if last_non_linearity is None:
@@ -178,38 +178,36 @@ class LastNet(torch.nn.Module):
         if output_size is None:
             output_size = conf.output_size
 
-        if conf.last_hidden_sizes is None:
-            last_hidden_sizes = []
-        else:
-            last_hidden_sizes = conf.last_hidden_sizes
+        if last_hidden_sizes is None:
+            if conf.last_hidden_sizes is None:
+                last_hidden_sizes = []
+            else:
+                last_hidden_sizes = conf.last_hidden_sizes
 
+        
+        self.net = nn.Sequential()
         if len(last_hidden_sizes) > 0:
-           self.net = nn.Sequential()
-           output_size_initial = conf.last_hidden_sizes[0]
-           self.net.add_module(f"initial_layer", nn.Sequential(
-               non_linearities[last_non_linearity](),
-               nn.Dropout(conf.middle_dropout),
-               nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size_initial),
-           ))
-           for i in range(len(conf.last_hidden_sizes) - 1):
-               self.net.add_module(f"layer_{i}", nn.Sequential(
-                   non_linearities[last_non_linearity](),
-                   nn.Dropout(conf.last_dropout),
-                   nn.Linear(conf.last_hidden_sizes[i], conf.last_hidden_sizes[i+1], bias=True),
-               ))
-           self.net.add_module(f"last_layer", nn.Sequential(
-                non_linearities[last_non_linearity](),
-                nn.Dropout(conf.last_dropout),
-                nn.Linear(conf.last_hidden_sizes[-1], output_size),
-            ))
+            output_size_initial = last_hidden_sizes[0]
         else:
-          self.non_linearity = last_non_linearity
-          non_linearity = non_linearities[last_non_linearity]
-          self.net = nn.Sequential(
-              non_linearity(),
-              nn.Dropout(conf.last_dropout),
-              nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size),
-          )
+            output_size_initial = output_size
+
+        self.net.add_module(f"initial_layer", nn.Sequential(
+            non_linearities[last_non_linearity](),
+            nn.Dropout(conf.dropouts_trunk[-1]),
+            nn.Linear(conf.hidden_sizes[-1]+extra_input_size, output_size_initial),
+        ))
+        for i in range(len(last_hidden_sizes) - 1):
+            self.net.add_module(f"layer_{i}", nn.Sequential(
+                non_linearities[last_non_linearity](),
+                nn.Dropout(dropouts[i]),
+                nn.Linear(last_hidden_sizes[i], last_hidden_sizes[i+1], bias=True),
+            ))
+        if len(last_hidden_sizes) > 0:
+            self.net.add_module(f"last_layer", nn.Sequential(
+                 non_linearities[last_non_linearity](),
+                 nn.Dropout(dropouts[-1]),
+                 nn.Linear(last_hidden_sizes[-1], output_size),
+            ))
 
         self.apply(self.init_weights)
 
@@ -255,21 +253,26 @@ class SparseFFN(torch.nn.Module):
 
         self.scaling = None #Scaling(conf.hidden_sizes[-1])
         if self.cat_fusion == 0:
-           if self.class_output_size is None or self.regr_output_size is None:
+            if self.class_output_size is None or self.regr_output_size is None:
                raise ValueError("Both regression and classification tergets are needed for hybrid mode")
-           self.classLast = LastNet(conf, output_size = conf.class_output_size, last_non_linearity = 'relu') #Override output size
-           if conf.scaling_regularizer == np.inf:
-               self.regrLast  =  nn.Sequential(
-                       LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
-                       )
-           else:
-               self.scaling = Scaling(conf.hidden_sizes[-1])
-               self.regrLast  =  nn.Sequential(
-                       self.scaling,
-                       LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh'),
-                      )
-               self.scaling_regularizer = conf.scaling_regularizer
-
+            self.classLast = LastNet(conf, output_size = conf.class_output_size, last_non_linearity = 'relu', last_hidden_sizes = conf.last_hidden_sizes_class, dropouts = conf.dropouts_class) #Override output size
+            if conf.scaling_regularizer == np.inf:
+                self.regrLast  =  nn.Sequential(LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh', last_hidden_sizes = conf.last_hidden_sizes_reg, dropouts = conf.dropouts_reg),
+                    )
+            else:
+                self.scaling = Scaling(conf.hidden_sizes[-1])
+                self.regrLast  =  nn.Sequential(
+                    self.scaling,
+                    LastNet(conf, output_size = conf.regr_output_size, last_non_linearity = 'tanh', last_hidden_sizes = conf.last_hidden_sizes_reg, dropouts = conf.dropouts_reg),
+                   )
+                self.scaling_regularizer = conf.scaling_regularizer
+        
+            regmask = torch.ones(1,conf.hidden_sizes[-1])
+            regmask[:,:-conf.regression_feature_size] = 0.0
+            classmask = torch.ones(1,conf.hidden_sizes[-1])
+            classmask[:,conf.class_feature_size:] = 0.0
+            self.register_buffer('regmask', regmask)
+            self.register_buffer('classmask', classmask)
 
     def GetRegularizer(self):
         if self.scaling is not None:
@@ -297,7 +300,7 @@ class SparseFFN(torch.nn.Module):
      #      if self.class_output_size is None:
      #          return out
         ## splitting to class and regression
-            return self.classLast(out), self.regrLast(out)
+            return self.classLast(out * self.classmask), self.regrLast(out * self.regmask)
 
 class SparseFFN_combined(nn.Module):
   def __init__(self, conf, shared_trunk, local_trunk, head):

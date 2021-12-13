@@ -6,3 +6,4 @@ __pycache__
 *.pdf
 *.npy
 *.pt
+.idea

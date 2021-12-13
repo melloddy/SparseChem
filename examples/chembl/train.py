@@ -1,4 +1,6 @@
 # Copyright (c) 2020 KU Leuven
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 import sparsechem as sc
 import scipy.io
 import scipy.sparse
@@ -21,6 +23,11 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
 from pytorch_memlab import MemReporter
 import multiprocessing
+from pynvml import *
+
+if torch.cuda.is_available():
+    nvmlInit()
+
 multiprocessing.set_start_method('fork', force=True)
 
 
@@ -41,12 +48,12 @@ parser.add_argument("--normalize_loss", help="Normalization constant to divide t
 parser.add_argument("--normalize_regression", help="Set this to 1 if the regression tasks should be normalized", type=int, default=0)
 parser.add_argument("--normalize_regr_va", help="Set this to 1 if the regression tasks in validation fold should be normalized together with training folds", type=int, default=0)
 parser.add_argument("--inverse_normalization", help="Set this to 1 if the regression tasks in validation fold should be inverse normalized at validation time", type=int, default=0)
-parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes", default=[], type=int, required=True)
-parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes in the head", default=None, type=int)
-parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
-parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
+parser.add_argument("--hidden_sizes", nargs="+", help="Hidden sizes of trunk", default=[], type=int, required=True)
+parser.add_argument("--last_hidden_sizes", nargs="+", help="Hidden sizes in the head (if specified , class and reg heads have this dimension)", default=None, type=int)
+#parser.add_argument("--middle_dropout", help="Dropout for layers before the last", type=float, default=0.0)
+#parser.add_argument("--last_dropout", help="Last dropout", type=float, default=0.2)
 parser.add_argument("--weight_decay", help="Weight decay", type=float, default=0.0)
-parser.add_argument("--last_non_linearity", help="Last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
+parser.add_argument("--last_non_linearity", help="Last layer non-linearity (depecrated)", type=str, default="relu", choices=["relu", "tanh"])
 parser.add_argument("--middle_non_linearity", "--non_linearity", help="Before last layer non-linearity", type=str, default="relu", choices=["relu", "tanh"])
 parser.add_argument("--input_transform", help="Transformation to apply to inputs", type=str, default="none", choices=["binarize", "none", "tanh", "log1p"])
 parser.add_argument("--lr", help="Learning rate", type=float, default=1e-3)
@@ -71,10 +78,33 @@ parser.add_argument("--mixed_precision", help="Set this to 1 to run in mixed pre
 parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
 parser.add_argument("--enable_cat_fusion", help="Set this to 1 to enable catalogue fusion", type=int, default=0)
 parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
+#hybrid model features
 parser.add_argument("--regression_weight", help="between 0 and 1 relative weight of regression loss vs classification loss", type=float, default=0.5)
 parser.add_argument("--scaling_regularizer", help="L2 regularizer of the scaling layer, if inf scaling layer is switched off", type=float, default=np.inf)
+parser.add_argument("--class_feature_size", help="Number of leftmost features used from the output of the trunk (default: use all)", type=int, default=-1)
+parser.add_argument("--regression_feature_size", help="Number of rightmost features used from the output of the trunk (default: use all)", type=int, default=-1)
+parser.add_argument("--last_hidden_sizes_reg", nargs="+", help="Hidden sizes in the regression head (overwritten by last_hidden_sizes)", default=None, type=int)
+parser.add_argument("--last_hidden_sizes_class", nargs="+", help="Hidden sizes in the classification head (overwritten by last_hidden_sizes)", default=None, type=int)
+parser.add_argument("--dropouts_reg", nargs="+", help="List of dropout values used in the regression head (needs one per last hidden in reg head, ignored if last_hidden_sizes_reg not specified)", default=[], type=float)
+parser.add_argument("--dropouts_class", nargs="+", help="List of dropout values used in the classification head (needs one per last hidden in class head, ignored if no last_hidden_sizes_class not specified)", default=[], type=float)
+parser.add_argument("--dropouts_trunk", nargs="+", help="List of dropout values used in the trunk", default=[], type=float)
+
 
 args = parser.parse_args()
+
+
+if (args.last_hidden_sizes is not None) and ((args.last_hidden_sizes_class is not None) or (args.last_hidden_sizes_reg is not None)):
+    raise ValueError("Head specific and general last_hidden_sizes argument were both specified!")
+if (args.last_hidden_sizes is not None):
+    args.last_hidden_sizes_class = args.last_hidden_sizes
+    args.last_hidden_sizes_reg   = args.last_hidden_sizes
+
+if args.last_hidden_sizes_reg is not None:
+    assert len(args.last_hidden_sizes_reg) == len(args.dropouts_reg), "Number of hiddens and number of dropout values specified must be equal in the regression head!"
+if args.last_hidden_sizes_class is not None:
+    assert len(args.last_hidden_sizes_class) == len(args.dropouts_class), "Number of hiddens and number of dropout values specified must be equal in the classification head!"
+if args.hidden_sizes is not None:
+    assert len(args.hidden_sizes) == len(args.dropouts_trunk), "Number of hiddens and number of dropout values specified must be equal in the trunk!"
 
 def vprint(s=""):
     if args.verbose:
@@ -82,10 +112,22 @@ def vprint(s=""):
 
 vprint(args)
 
+if args.class_feature_size == -1:
+    args.class_feature_size = args.hidden_sizes[-1]
+if args.regression_feature_size == -1:
+    args.regression_feature_size = args.hidden_sizes[-1]
+
+assert args.regression_feature_size <= args.hidden_sizes[-1], "Regression feature size cannot be larger than the trunk output"
+assert args.class_feature_size <= args.hidden_sizes[-1], "Classification feature size cannot be larger than the trunk output"
+assert args.regression_feature_size + args.class_feature_size >= args.hidden_sizes[-1], "Unused features in the trunk! Set regression_feature_size + class_feature_size >= trunk output!"
+#if args.regression_feature_size != args.hidden_sizes[-1] or args.class_feature_size != args.hidden_sizes[-1]:
+#    raise ValueError("Hidden spliting not implemented yet!")
+
+
 if args.run_name is not None:
     name = args.run_name
 else:
-    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo{args.last_dropout:.1f}_wd{args.weight_decay}"
+    name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo_r{'.'.join([str(d) for d in args.dropouts_reg])}_wd{args.weight_decay}"
     name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
     name += f"_fva{args.fold_va}_fte{args.fold_te}"
     if args.mixed_precision == 1:
@@ -198,6 +240,7 @@ num_neg_va  = np.array((y_class_va == -1).sum(0)).flatten()
 num_regr_va = np.bincount(y_regr_va.indices, minlength=y_regr.shape[1])
 pos_rate = num_pos_va/(num_pos_va+num_neg_va)
 pos_rate_ref = args.pi_zero
+pos_rate = np.clip(pos_rate, 0, 0.99)
 cal_fact_aucpr = pos_rate*(1-pos_rate_ref)/(pos_rate_ref*(1-pos_rate))
 #import ipdb; ipdb.set_trace()
 batch_size  = int(np.ceil(args.batch_ratio * idx_tr.shape[0]))
@@ -246,6 +289,16 @@ tasks_regr.censored_weight  = tasks_regr.censored_weight.to(dev)
 vprint("Network:")
 vprint(net)
 reporter = None
+h = None
+if args.profile == 1:
+   torch_gpu_id = torch.cuda.current_device()
+   if "CUDA_VISIBLE_DEVICES" in os.environ:
+      ids = list(map(int, os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")))
+      nvml_gpu_id = ids[torch_gpu_id] # remap
+   else:
+      nvml_gpu_id = torch_gpu_id
+   h = nvmlDeviceGetHandleByIndex(nvml_gpu_id)
+
 if args.profile == 1:
    #####   output saving   #####
    if not os.path.exists(args.output_dir):
@@ -280,7 +333,8 @@ for epoch in range(args.epochs):
         writer = writer,
         epoch = epoch,
         args = args,
-        scaler = scaler)
+        scaler = scaler,
+        nvml_handle = h)
 
     if args.profile == 1:
        with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
@@ -317,6 +371,10 @@ for epoch in range(args.epochs):
 
     scheduler.step()
 
+#print("DEBUG data for hidden spliting")
+#print (f"Classification mask: Sum = {net.classmask.sum()}\t Uniques: {np.unique(net.classmask)}")
+#print (f"Regression mask:     Sum = {net.regmask.sum()}\t Uniques: {np.unique(net.regmask)}")
+#print (f"overlap: {(net.regmask * net.classmask).sum()}")
 writer.close()
 vprint()
 if args.profile == 1:

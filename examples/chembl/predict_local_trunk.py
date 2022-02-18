@@ -122,7 +122,7 @@ if args.last_hidden:
     print(f"Saved (numpy) matrix of hiddens to '{filename}'.")
 else:
     if args.y_class is None and args.y_regr is None:
-        class_out, regr_out = sc.predict(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
+        class_out, regr_out = sc.predict_dense(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
     else:
         class_out, regr_out = sc.predict_sparse(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
 

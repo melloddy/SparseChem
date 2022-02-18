@@ -673,7 +673,7 @@ def enable_dropout(m):
     if type(m) == torch.nn.Dropout:
         m.train()
 
-def predict(net, loader, dev, progress=True, dropout=False, y_cat_columns=None):
+def predict_dense(net, loader, dev, progress=True, dropout=False, y_cat_columns=None):
     """
     Makes predictions for all compounds in the loader.
     """

@@ -89,6 +89,9 @@ def train():
     parser.add_argument("--dropouts_class", nargs="+", help="List of dropout values used in the classification head (needs one per last hidden in class head, ignored if no last_hidden_sizes_class not specified)", default=[], type=float)
     parser.add_argument("--dropouts_trunk", nargs="+", help="List of dropout values used in the trunk", default=[], type=float, required=True)
 
+    parser.add_argument("--optimizer", help="Choose the optimizer [Adam/SGD] (default: Adam)", type=str, default="Adam")
+    parser.add_argument("--optimizer_params", nargs="+", help="Additional parameters for the optimizer in order as in Pytorch documentation eg. Adam: {beta1,  bete2, epsilon}, SGD:{momentum}. Default: Pytorch default.", default=[], type=float)
+
 
     args = parser.parse_args()
 
@@ -112,6 +115,34 @@ def train():
 
     vprint(args)
 
+
+    args.optimizer = args.optimizer.lower()
+    optim_suffix = ""
+    if args.optimizer == "adam":
+        if len(args.optimizer_params) > 0:
+            if len(args.optimizer_params) == 3:
+                vprint(f"Optimizer: Adam(beta1={args.optimizer_params[0]:.4f}, beta2={args.optimizer_params[1]:.4f}, epsilon={args.optimizer_params[2]:.4f})")
+                optim_suffix=f"_Adam_1b{args.optimizer_params[0]}_2b{args.optimizer_params[1]}_eps{args.optimizer_params[2]}"
+            else:
+                raise ValueError("optimizer_params for Adam optimizer should have 3 values: beta1, beta2, epsilon")
+        else:
+            vprint(f"Optimizer: Adam(Default)")
+
+
+    elif args.optimizer == "sgd":
+        if len(args.optimizer_params) > 0:
+            if len(args.optimizer_params) == 1:
+                vprint(f"Optimizer: SGD(mementum = {args.optimizer_params[0]:.4f})")
+                optim_suffix=f"_sgd_m{args.optimizer_params[0]}"
+            else:
+                raise ValueError("optimizer_params for SGD optimizer should have 1 value: momentum")
+        else:
+            vprint(f"Optimizer: SGD(Default)")
+            optim_suffix="_sgd"
+    else:
+        raise ValueError("Unsupported optimizer! Supperted: Adam, SGD")
+        
+
     if args.class_feature_size == -1:
         args.class_feature_size = args.hidden_sizes[-1]
     if args.regression_feature_size == -1:
@@ -130,6 +161,7 @@ def train():
         name  = f"sc_{args.prefix}_h{'.'.join([str(h) for h in args.hidden_sizes])}_ldo_r{'.'.join([str(d) for d in args.dropouts_reg])}_wd{args.weight_decay}"
         name += f"_lr{args.lr}_lrsteps{'.'.join([str(s) for s in args.lr_steps])}_ep{args.epochs}"
         name += f"_fva{args.fold_va}_fte{args.fold_te}"
+        name += optim_suffix
         if args.mixed_precision == 1:
             name += f"_mixed_precision"
     vprint(f"Run name is '{name}'.")
@@ -310,7 +342,23 @@ def train():
             with redirect_stdout(profile_file):
                  profile_file.write(f"\nInitial model detailed report:\n\n")
                  reporter.report()
-    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    if args.optimizer == "adam":
+        if args.optimizer_params == []:
+            optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        else:
+            optimizer = torch.optim.Adam(net.parameters(), 
+                            betas = (args.optimizer_params[0], args.optimizer_params[1]), 
+                            eps = args.optimizer_params[2], 
+                            lr=args.lr, 
+                            weight_decay=args.weight_decay)
+
+    if args.optimizer == "sgd":
+        if args.optimizer_params == []:
+            optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        else:
+            optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.optimizer_params[0], weight_decay=args.weight_decay)
+
     scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
     num_prints = 0

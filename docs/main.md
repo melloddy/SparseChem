@@ -230,5 +230,6 @@ Then the output file will contain the numpy matrix of the hidden vectors, which 
 * __--save_board__: Set this to 0 if the TensorBoard should not be saved
 * __--eval_train__: Set this to 1 to calculate AUCs for train data (int, default=0)
 * __--eval_frequency__: The gap between AUC eval (in epochs), -1 means to do an eval at the end. (int, default=1)
-
+* __--optimizer__: Choose the optimizer (Adam or SGD, default: Adam)
+* __--optimizer_params__: Set optimizer specific parameters (Adam(beta1, beta2, epsilon), SGD(momentum), default: Pytorch default)
 

@@ -284,7 +284,7 @@ class SparseFFN(torch.nn.Module):
     def has_2heads(self):
         return self.class_output_size is not None
 
-    def forward(self, X, last_hidden=False):
+    def forward(self, X, last_hidden=False, trunk_embeddings=False):
         if self.cat_fusion == 1:
             if last_hidden:
                H = self.net[:-1](X)
@@ -297,6 +297,8 @@ class SparseFFN(torch.nn.Module):
             if last_hidden:
                 raise ValueError("Last_hidden is not supported for hybrid mode")
             out = self.net(X)
+            if trunk_embeddings:
+                return out
      #      if self.class_output_size is None:
      #          return out
         ## splitting to class and regression

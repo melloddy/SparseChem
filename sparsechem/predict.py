@@ -34,7 +34,8 @@ def predict():
     parser.add_argument("--conf", help="Model conf file (.json or .npy)", type=str, required=True)
     parser.add_argument("--model", help="Pytorch model file (.pt)", type=str, required=True)
     parser.add_argument("--batch_size", help="Batch size (default 4000)", type=int, default=4000)
-    parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
+#    parser.add_argument("--last_hidden", help="If set to 1 returns last hidden layer instead of Yhat", type=int, default=0)
+    parser.add_argument("--trunk_embeddings", help="If set to 1 return trunk embeddings (before non-linearity, e.g relu,tanh)  instead of Yhat", type=int, default=0)
     parser.add_argument("--dropout", help="If set to 1 enables dropout for evaluation", type=int, default=0)
     parser.add_argument("--inverse_normalization", help="If set to 1 enables inverse normalization given means and variances from config file", type=int, default=0)
     parser.add_argument("--weights_class", "--task_weights", "--weights_classification", help="CSV file with columns task_id, training_weight, aggregation_weight, task_type (for classification tasks)", type=str, default=None)
@@ -57,8 +58,8 @@ def predict():
     print(f"#samples:        {x.shape[0]}")
 
     ## error checks for --y_class, --y_regr, --folding and --predict_fold
-    if args.last_hidden:
-        assert args.y_class is None, "Cannot use '--last_hidden 1' with sparse predictions ('--y_class' or '--y_regr' is specified)."
+#    if args.last_hidden:
+#        assert args.y_class is None, "Cannot use '--last_hidden 1' with sparse predictions ('--y_class' or '--y_regr' is specified)."
 
 
     if args.y_class is None and args.y_regr is None:
@@ -114,7 +115,7 @@ def predict():
     dataset_te = sc.ClassRegrSparseDataset(x=x, y_class=y_class, y_regr=y_regr)
     loader_te  = DataLoader(dataset_te, batch_size=args.batch_size, num_workers = args.num_workers, pin_memory=True, collate_fn=dataset_te.collate)
 
-    if args.last_hidden:
+    if args.trunk_embeddings:
         ## saving only hidden layer
         out      = sc.predict_hidden(net, loader_te, dev=dev, dropout=args.dropout, progress=True)
         filename = f"{args.outprefix}-hidden.npy"

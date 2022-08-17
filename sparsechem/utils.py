@@ -79,7 +79,7 @@ def return_max_val(data):
     return max_val
 
 
-def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
+def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False, yr_hat_dense=False):
     if array==False:
         stdev = np.sqrt(variance)
         diagstdev = scipy.sparse.diags(np.array(stdev)[0],0)
@@ -89,6 +89,8 @@ def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False):
         y_mask = np.ones(yr_hat_all.shape)
         y_inv_norm = y_inv_norm + torch.from_numpy(y_mask * diagm).to(torch.float32).to(dev)
     else:
+        if yr_hat_dense:
+            yr_hat_all = csr_matrix(yr_hat_all)
         y_mask = yr_hat_all.copy()
         y_mask.data = np.ones_like(y_mask.data)
         set_mask = set([(i,j) for i,j in zip(y_mask.nonzero()[0], y_mask.nonzero()[1])])

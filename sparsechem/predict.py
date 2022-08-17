@@ -123,6 +123,8 @@ def predict():
     else:
         if args.y_class is None and args.y_regr is None:
             class_out, regr_out = sc.predict_dense(net, loader_te, dev=dev, dropout=args.dropout, progress=True, y_cat_columns=select_cat_ids)
+            if args.inverse_normalization == 1:
+               regr_out = sc.inverse_normalization(regr_out, mean=np.array(stats["mean"]), variance=np.array(stats["var"]), array=True, yr_hat_dense=True)
         else:
             class_out, regr_out = sc.predict_sparse(net, loader_te, dev=dev, dropout=args.dropout, progress=True, y_cat_columns=select_cat_ids)
             if args.inverse_normalization == 1:

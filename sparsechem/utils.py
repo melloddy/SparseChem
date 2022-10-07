@@ -703,7 +703,7 @@ def predict_dense(net, loader, dev, progress=True, dropout=False, y_cat_columns=
     y_regr  = torch.cat(y_regr_list, dim=0)
     return y_class.numpy(), y_regr.numpy()
 
-def predict_hidden(net, loader, dev, progress=True, dropout=False):
+def predict_hidden(net, loader, dev, progress=True, dropout=False, trunk_embeddings=True):
     """
     Returns hidden values for all compounds in the loader.
     """
@@ -719,7 +719,10 @@ def predict_hidden(net, loader, dev, progress=True, dropout=False):
                     b["x_ind"],
                     b["x_data"],
                     size = [b["batch_size"], loader.dataset.input_size]).to(dev)
-            out_list.append( net(X, last_hidden=True).cpu() )
+            if trunk_embeddings:
+                out_list.append( net(X, trunk_embeddings=True).cpu() )
+            else:
+                out_list.append( net(X, last_hidden=True).cpu() )
 
     return torch.cat(out_list, dim=0)
 

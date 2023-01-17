@@ -90,23 +90,25 @@ def inverse_normalization(yr_hat_all, mean, variance, dev="cpu", array=False, yr
         y_inv_norm = y_inv_norm + torch.from_numpy(y_mask * diagm).to(torch.float32).to(dev)
     else:
         if yr_hat_dense:
-            yr_hat_all = csr_matrix(yr_hat_all)
-        y_mask = yr_hat_all.copy()
-        y_mask.data = np.ones_like(y_mask.data)
-        set_mask = set([(i,j) for i,j in zip(y_mask.nonzero()[0], y_mask.nonzero()[1])])
-        stdev = np.sqrt(variance)
-        diagstdev = scipy.sparse.diags(stdev,0)
-        y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
-        diagm = scipy.sparse.diags(mean, 0)
-        y_inv_norm = y_inv_norm + y_mask * diagm
-        set_inv_norm = set([(i,j) for i,j in zip(y_inv_norm.nonzero()[0], y_inv_norm.nonzero()[1])])
-        set_delta = set_mask - set_inv_norm
-        for delta in set_delta:
-            y_inv_norm[delta[0],delta[1]]=0
+            stdev      = np.sqrt(variance)
+            y_inv_norm = (yr_hat_all * stdev) + mean
+        else:
+            y_mask = yr_hat_all.copy()
+            y_mask.data = np.ones_like(y_mask.data)
+            set_mask = set([(i,j) for i,j in zip(y_mask.nonzero()[0], y_mask.nonzero()[1])])
+            stdev = np.sqrt(variance)
+            diagstdev = scipy.sparse.diags(stdev,0)
+            y_inv_norm = yr_hat_all.multiply(y_mask * diagstdev)
+            diagm = scipy.sparse.diags(mean, 0)
+            y_inv_norm = y_inv_norm + y_mask * diagm
+            set_inv_norm = set([(i,j) for i,j in zip(y_inv_norm.nonzero()[0], y_inv_norm.nonzero()[1])])
+            set_delta = set_mask - set_inv_norm
+            for delta in set_delta:
+                y_inv_norm[delta[0],delta[1]]=0
+            y_inv_norm.sort_indices()
+            assert (yr_hat_all.indptr == y_inv_norm.indptr).all(), "yr_hat_all and y_inv_norm must have the same .indptr"
+            assert (yr_hat_all.indices == y_inv_norm.indices).all(), "yr_hat_all and y_inv_norm must have the same .indices"
         assert yr_hat_all.shape == y_inv_norm.shape, "Shapes of yr_hat_all and y_inv_norm must be equal."
-        y_inv_norm.sort_indices()
-        assert (yr_hat_all.indptr == y_inv_norm.indptr).all(), "yr_hat_all and y_inv_norm must have the same .indptr"
-        assert (yr_hat_all.indices == y_inv_norm.indices).all(), "yr_hat_all and y_inv_norm must have the same .indices"
     return y_inv_norm
 
 def normalize_regr(y_regr, mean=None, std=None):

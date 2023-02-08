@@ -19,7 +19,7 @@ from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 from scipy.sparse import csr_matrix
 from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
-from .ACE_ECE_calculation import calculateErrors_oneTarget
+from .calculation_ProbCalibrationError import calcCalibrationErrors
 
 class Nothing(object):
     def __getattr__(self, name):
@@ -191,7 +191,7 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
     y_classes = np.where(y_score >= 0.0, 1, 0)
     
     ##Calculate Calibration Errors
-    ece,ace= calculateErrors_oneTarget(y_true, y_score, num_bins=num_bins)
+    ece,ace= calcCalibrationErrors(y_true, y_score, num_bins=num_bins)
     
     ## accuracy for all thresholds
     acc, kappas   = calc_acc_kappa(recall=tpr, fpr=fpr, num_pos=(y_true==1).sum(), num_neg=(y_true==0).sum())

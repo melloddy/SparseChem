@@ -78,6 +78,7 @@ def train():
     parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
     parser.add_argument("--enable_cat_fusion", help="Set this to 1 to enable catalogue fusion", type=int, default=0)
     parser.add_argument("--eval_frequency", help="The gap between AUC eval (in epochs), -1 means to do an eval at the end.", type=int, default=1)
+    parser.add_argument("--num_bins", help="Number of bins used in Calculation of Probability Calibration Errors ECE and ACE", type=int, default=10)
     #hybrid model features
     parser.add_argument("--regression_weight", help="between 0 and 1 relative weight of regression loss vs classification loss", type=float, default=0.5)
     parser.add_argument("--scaling_regularizer", help="L2 regularizer of the scaling layer, if inf scaling layer is switched off", type=float, default=np.inf)
@@ -94,7 +95,6 @@ def train():
 
 
     args = parser.parse_args()
-
 
     if (args.last_hidden_sizes is not None) and ((args.last_hidden_sizes_class is not None) or (args.last_hidden_sizes_reg is not None)):
         raise ValueError("Head specific and general last_hidden_sizes argument were both specified!")
@@ -395,7 +395,7 @@ def train():
         last_round = epoch == args.epochs - 1
 
         if eval_round or last_round:
-            results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv, cal_fact_aucpr=cal_fact_aucpr)
+            results_va = sc.evaluate_class_regr(net, loader_va, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, normalize_inv=normalize_inv, cal_fact_aucpr=cal_fact_aucpr, num_bins=args.num_bins)
        #     import ipdb; ipdb.set_trace()
             for key, val in results_va["classification_agg"].items():
                 writer.add_scalar(key+"/va", val, epoch)
@@ -403,7 +403,7 @@ def train():
                 writer.add_scalar(key+"/va", val, epoch)
 
             if args.eval_train:
-                results_tr = sc.evaluate_class_regr(net, loader_tr, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2)
+                results_tr = sc.evaluate_class_regr(net, loader_tr, loss_class, loss_regr, tasks_class=tasks_class, tasks_regr=tasks_regr, dev=dev, progress = args.verbose >= 2, num_bins=args.num_bins)
                 for key, val in results_tr["classification_agg"].items():
                     writer.add_scalar(key+"/tr", val, epoch)
                 for key, val in results_tr["regression_agg"].items():

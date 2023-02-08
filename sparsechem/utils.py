@@ -19,6 +19,7 @@ from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 from scipy.sparse import csr_matrix
 from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
+from .ACE_ECE_calculation import calculateErrors_oneTarget
 
 class Nothing(object):
     def __getattr__(self, name):
@@ -153,7 +154,7 @@ def calc_acc_kappa(recall, fpr, num_pos, num_neg):
     kappa = (acc - pexp) / (1 - pexp)
     return acc, kappa
 
-def all_metrics(y_true, y_score, cal_fact_aucpr_task):
+def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
     """Compute classification metrics.
     Args:
         y_true     true labels (0 / 1)
@@ -188,7 +189,10 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task):
           y_true  = y_true,
           y_score = y_score)
     y_classes = np.where(y_score >= 0.0, 1, 0)
-
+    
+    ##Calculate Calibration Errors
+    ece,ace= calculateErrors_oneTarget(y_true, y_score, num_bins=num_bins)
+    
     ## accuracy for all thresholds
     acc, kappas   = calc_acc_kappa(recall=tpr, fpr=fpr, num_pos=(y_true==1).sum(), num_neg=(y_true==0).sum())
     kappa_max_idx = kappas.argmax()
@@ -196,7 +200,7 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal]})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace]})
     return df
 
 def compute_corr(x, y):
@@ -233,7 +237,7 @@ def all_metrics_regr(y_true, y_score, y_censor=None):
     })
     return df
 
-def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
+def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr, num_bins):
     if len(cols) < 1:
         return pd.DataFrame({
             "roc_auc_score": np.nan,
@@ -244,20 +248,24 @@ def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr):
             "kappa": np.nan,
             "kappa_max": np.nan,
             "p_kappa_max": np.nan,
-            "bceloss": np.nan}, index=np.arange(num_tasks))
+            "bceloss": np.nan,
+            "ece": np.nan,
+            "ace" : np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
     if hasattr(cal_fact_aucpr, "__len__"):
         metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values,
-                  cal_fact_aucpr_task = cal_fact_aucpr[g['task'].values[0]]))
+                  cal_fact_aucpr_task = cal_fact_aucpr[g['task'].values[0]],
+                  num_bins=num_bins))
     else:
         metrics = df.groupby("task", sort=True).apply(lambda g:
               all_metrics(
                   y_true  = g.y_true.values,
                   y_score = g.y_score.values,
-                  cal_fact_aucpr_task = 1.0))
+                  cal_fact_aucpr_task = 1.0,
+                  num_bins=num_bins))
     metrics.reset_index(level=-1, drop=True, inplace=True)
     return metrics.reindex(np.arange(num_tasks))
 
@@ -601,7 +609,7 @@ def aggregate_results(df, weights):
     df2 = df.where(pd.isnull, 1) * weights[:,None]
     return (df2.multiply(1.0 / df2.sum(axis=0), axis=1) * df).sum(axis=0)
 
-def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, progress=True, normalize_inv=None, cal_fact_aucpr=1):
+def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_regr, dev, num_bins, progress=True, normalize_inv=None, cal_fact_aucpr=1):
     class_w = tasks_class.aggregation_weight
     regr_w  = tasks_regr.aggregation_weight
 
@@ -638,14 +646,14 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
         out = {}
         if len(data["yc_ind"]) == 0:
             ## there are no data for classification
-            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr)
+            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucprm, num_bins=num_bins)
             out["classification_agg"] = out["classification"].reindex(labels=[]).mean(0)
             out["classification_agg"]["logloss"] = np.nan
         else:
             yc_ind  = torch.cat(data["yc_ind"], dim=1).numpy()
             yc_data = torch.cat(data["yc_data"], dim=0).numpy()
             yc_hat  = torch.cat(data["yc_hat"], dim=0).numpy()
-            out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr)
+            out["classification"] = compute_metrics(yc_ind[1], y_true=yc_data, y_score=yc_hat, num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr, num_bins=num_bins)
             out["classification_agg"] = aggregate_results(out["classification"], weights=class_w)
             out["classification_agg"]["logloss"] = loss_class_sum.cpu().item() / loss_class_weights.cpu().item()
 
@@ -669,8 +677,6 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
         out["classification_agg"]["num_tasks_total"] = loader.dataset.class_output_size
         out["classification_agg"]["num_tasks_agg"]   = (tasks_class.aggregation_weight > 0).sum()
         out["regression_agg"]["num_tasks_total"] = loader.dataset.regr_output_size
-        out["regression_agg"]["num_tasks_agg"]   = (tasks_regr.aggregation_weight > 0).sum()
-
         return out
 
 def enable_dropout(m):

@@ -54,11 +54,15 @@ net = sc.SparseFFN(conf)
 state_dict_new = net.state_dict()
 for key in state_dict.keys():
     if key not in ["classLast.net.2.weight","classLast.net.2.bias","regrLast.0.net.2.weight","regrLast.0.net.2.bias"]:
-        state_dict_new[key] = state_dict[key]
-    state_dict_new["classLast.net.initial_layer.2.weight"] = state_dict["classLast.net.2.weight"]
-    state_dict_new["classLast.net.initial_layer.2.bias"] = state_dict["classLast.net.2.bias"]
-    state_dict_new["regrLast.0.net.initial_layer.2.weight"] = state_dict["regrLast.0.net.2.weight"]
-    state_dict_new["regrLast.0.net.initial_layer.2.bias"] = state_dict["regrLast.0.net.2.bias"]
+       state_dict_new[key] = state_dict[key]
+    if key in ["classLast.net.2.weight"]:
+       state_dict_new["classLast.net.initial_layer.2.weight"] = state_dict[key]
+    if key in ["classLast.net.2.bias"]:
+       state_dict_new["classLast.net.initial_layer.2.bias"] = state_dict[key]
+    if key in ["regrLast.0.net.2.weight"]
+       state_dict_new["regrLast.0.net.initial_layer.2.weight"] = state_dict[key]
+    if key in ["regrLast.0.net.2.bias"]:
+       state_dict_new["regrLast.0.net.initial_layer.2.bias"] = state_dict[key]
 
 net.load_state_dict(state_dict_new)
 

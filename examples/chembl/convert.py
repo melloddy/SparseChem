@@ -59,7 +59,7 @@ for key in state_dict.keys():
        state_dict_new["classLast.net.initial_layer.2.weight"] = state_dict[key]
     if key in ["classLast.net.2.bias"]:
        state_dict_new["classLast.net.initial_layer.2.bias"] = state_dict[key]
-    if key in ["regrLast.0.net.2.weight"]
+    if key in ["regrLast.0.net.2.weight"]:
        state_dict_new["regrLast.0.net.initial_layer.2.weight"] = state_dict[key]
     if key in ["regrLast.0.net.2.bias"]:
        state_dict_new["regrLast.0.net.initial_layer.2.bias"] = state_dict[key]

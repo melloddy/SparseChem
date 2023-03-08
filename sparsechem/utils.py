@@ -335,23 +335,30 @@ def print_table(formats, data):
     for key, fmt in formats.items():
         print(fmt.format(data[key]), end="")
 
+
 Column = namedtuple("Column", "key size dec title")
-columns_cr = [
-    Column("epoch",         size=6, dec= 0, title="Epoch"),
-    Column(None,            size=1, dec=-1, title="|"),
-    Column("logloss",       size=8, dec= 5, title="logl"),
-    Column("bceloss",       size=8, dec= 5, title="bceloss"),
-    Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
-    Column("auc_pr",        size=8, dec= 5, title="aucpr"),
-    Column("auc_pr_cal",    size=9, dec= 5, title="aucpr_cal"),
-    Column("f1_max",        size=8, dec= 5, title="f1_max"),
-    Column(None,            size=1, dec=-1, title="|"),
-    Column("rmse",          size=9, dec= 5, title="rmse"),
-    Column("rsquared",      size=9, dec= 5, title="rsquared"),
-    Column("corrcoef",      size=9, dec= 5, title="corrcoef"),
-    Column(None,            size=1, dec=-1, title="|"),
-    Column("train_time",    size=6, dec= 1, title="tr_time"),
-]
+try:
+    df = pd.read_csv("./displayprofile", sep="\s+")
+    columns_cr = []
+    for i, row in df.iterrows():
+        columns_cr.append(Column(row["metric"], size=row["size"], dec=row["dec"], title=row["title"]))
+except:
+    columns_cr = [
+        Column("epoch",         size=6, dec= 0, title="Epoch"),
+        Column(None,            size=1, dec=-1, title="|"),
+        Column("logloss",       size=8, dec= 5, title="logl"),
+        Column("bceloss",       size=8, dec= 5, title="bceloss"),
+        Column("roc_auc_score", size=8, dec= 5, title="aucroc"),
+        Column("auc_pr",        size=8, dec= 5, title="aucpr"),
+        Column("auc_pr_cal",    size=9, dec= 5, title="aucpr_cal"),
+        Column("f1_max",        size=8, dec= 5, title="f1_max"),
+        Column(None,            size=1, dec=-1, title="|"),
+        Column("rmse",          size=9, dec= 5, title="rmse"),
+        Column("rsquared",      size=9, dec= 5, title="rsquared"),
+        Column("corrcoef",      size=9, dec= 5, title="corrcoef"),
+        Column(None,            size=1, dec=-1, title="|"),
+        Column("train_time",    size=6, dec= 1, title="tr_time"),
+    ]
 
 def print_cell(value, size, dec, left, end=" "):
     align = "<" if left else ">"

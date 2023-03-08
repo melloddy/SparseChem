@@ -40,6 +40,11 @@ def calcCalibrationErrors(y_true, y_score, num_bins):
         return (np.abs(np.array(posRatio_bin)-np.array(meanProb_bin))*bin_size)
             #      |               acc(b)-         conf(n)| * nb
 
+    #Calculate variance estimate by sum of variances of every of Beta distribution
+    def estimate_variance(input_arr):
+        p = (input_arr==1).sum()
+        n = input_arr.shape[0] - p
+        return (n*p)/((n+p)*(n+p+1))
 
     y_score=expit(y_score)
 
@@ -66,6 +71,8 @@ def calcCalibrationErrors(y_true, y_score, num_bins):
         bin_ind=0
         ece=0
         ace=0
+        vace=0 #Variance estimate of ACE
+        vece=0 #Variance estimate of ECE
 
         #iterate over all bins
         for bin_ind in range(num_bins):
@@ -83,6 +90,7 @@ def calcCalibrationErrors(y_true, y_score, num_bins):
                 meanProb_ECE=np.mean(ECE_collector[1])
                 #...calculate ECE for current target and sum error over all bins:
                 ece += calculate_error(posRatio_bin=posRatio_ECE, meanProb_bin=meanProb_ECE, bin_size=ECE_collector[2])
+                vece += estimate_variance(ECE_collector[0])
             
                             
             if ACE_collector[2]!=0:
@@ -92,14 +100,19 @@ def calcCalibrationErrors(y_true, y_score, num_bins):
                 meanProb_ACE=np.mean(ACE_collector[1])
                 #...calculate ACE for current bin and sum error over all bins with measurements:
                 ace += calculate_error(posRatio_bin=posRatio_ACE, meanProb_bin=meanProb_ACE, bin_size=ACE_collector[2])
+                vace += estimate_variance(ACE_collector[0])
 
         #the final ECE/ACE is divided by number of datapoints in a target
         ece_target=ece/target_size
         ace_target=ace/target_size
 
-    return ece_target, ace_target
+    return ece_target, ace_target, vece/target_size, vace/target_size
 
 
+def Brier(y_true, y_score):
+    ''' Calculatin Brier-score: MSE between the prediction and the binary label
+    '''
+    return ((expit(y_score) - y_true)**2).mean()
 
 
 

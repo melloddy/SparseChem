@@ -19,7 +19,7 @@ from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 from scipy.sparse import csr_matrix
 from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
-from .calculation_ProbCalibrationError import calcCalibrationErrors
+from .calculation_ProbCalibrationError import calcCalibrationErrors, Brier
 
 class Nothing(object):
     def __getattr__(self, name):
@@ -191,7 +191,8 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
     y_classes = np.where(y_score >= 0.0, 1, 0)
     
     ##Calculate Calibration Errors
-    ece,ace= calcCalibrationErrors(y_true, y_score, num_bins=num_bins)
+    ece,ace, vece, vace = calcCalibrationErrors(y_true, y_score, num_bins=num_bins)
+    brier = Brier(y_true, y_score)
     
     ## accuracy for all thresholds
     acc, kappas   = calc_acc_kappa(recall=tpr, fpr=fpr, num_pos=(y_true==1).sum(), num_neg=(y_true==0).sum())
@@ -200,7 +201,7 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace]})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace], "std_ece": [np.sqrt(vece)], "std_ace":[np.sqrt(vace)], "brier":[brier]})
     return df
 
 def compute_corr(x, y):
@@ -250,7 +251,10 @@ def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr, num_bins):
             "p_kappa_max": np.nan,
             "bceloss": np.nan,
             "ece": np.nan,
-            "ace" : np.nan}, index=np.arange(num_tasks))
+            "ace" : np.nan,
+            "std_ece": np.nan,
+            "std_ace": np.nan,
+            "brier":np.nan}, index=np.arange(num_tasks))
     df   = pd.DataFrame({"task": cols, "y_true": y_true, "y_score": y_score})
     if hasattr(cal_fact_aucpr, "__len__"):
         metrics = df.groupby("task", sort=True).apply(lambda g:

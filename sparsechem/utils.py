@@ -145,9 +145,9 @@ def count_parameters(model):
 def calc_acc_kappa(recall, fpr, num_pos, num_neg):
     """Calculates accuracy from recall and precision."""
     num_all = num_neg + num_pos
-    tp = np.round(recall * num_pos).astype(np.int)
+    tp = np.round(recall * num_pos).astype(int)
     fn = num_pos - tp
-    fp = np.round(fpr * num_neg).astype(np.int)
+    fp = np.round(fpr * num_neg).astype(int)
     tn = num_neg - fp
     acc   = (tp + tn) / num_all
     pexp  = num_pos / num_all * (tp + fp) / num_all + num_neg / num_all * (tn + fn) / num_all

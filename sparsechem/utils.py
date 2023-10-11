@@ -161,7 +161,7 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
         y_score    logit values
     """
     if len(y_true) <= 1 or (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan], "auc_pr_cal": [np.nan]})
+        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan], "auc_pr_cal": [np.nan], "ece" : [np.nan],  "ace" : [np.nan], "std_ece": [np.nan], "std_ace":[np.nan], "brier":[np.nan]})
         return df
 
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
@@ -201,7 +201,7 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace], "std_ece": [np.sqrt(vece)], "std_ace":[np.sqrt(vace)], "brier":[brier]})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": [p_kappa_max], "bceloss": [bceloss], "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace], "std_ece": [np.sqrt(vece)], "std_ace":[np.sqrt(vace)], "brier":[brier]})
     return df
 
 def compute_corr(x, y):

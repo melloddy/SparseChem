@@ -20,7 +20,7 @@ from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.tensorboard import SummaryWriter
-from pytorch_memlab import MemReporter
+#from pytorch_memlab import MemReporter
 import multiprocessing
 from pynvml import *
 
@@ -320,7 +320,7 @@ def train():
 
     vprint("Network:")
     vprint(net)
-    reporter = None
+    #reporter = None
     h = None
     if args.profile == 1:
        torch_gpu_id = torch.cuda.current_device()
@@ -336,12 +336,12 @@ def train():
        if not os.path.exists(args.output_dir):
            os.makedirs(args.output_dir)
 
-       reporter = MemReporter(net)
+       #reporter = MemReporter(net)
 
-       with open(f"{args.output_dir}/memprofile.txt", "w+") as profile_file:
-            with redirect_stdout(profile_file):
-                 profile_file.write(f"\nInitial model detailed report:\n\n")
-                 reporter.report()
+       #with open(f"{args.output_dir}/memprofile.txt", "w+") as profile_file:
+       #     with redirect_stdout(profile_file):
+       #          profile_file.write(f"\nInitial model detailed report:\n\n")
+       #          reporter.report()
 
     if args.optimizer == "adam":
         if args.optimizer_params == []:
@@ -362,7 +362,7 @@ def train():
     scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_alpha)
 
     num_prints = 0
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler("cuda")
     for epoch in range(args.epochs):
         t0 = time.time()
         sc.train_class_regr(
@@ -377,7 +377,7 @@ def train():
             normalize_loss  = args.normalize_loss,
             num_int_batches = num_int_batches,
             progress        = args.verbose >= 2,
-            reporter = reporter,
+           # reporter = reporter,
             writer = writer,
             epoch = epoch,
             args = args,
@@ -385,10 +385,11 @@ def train():
             nvml_handle = h)
 
         if args.profile == 1:
-           with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
-                profile_file.write(f"\nAfter epoch {epoch} model detailed report:\n\n")
-                with redirect_stdout(profile_file):
-                     reporter.report()
+            raise ValueError("Memory profiling not supported in this version.")
+        #   with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+        #        profile_file.write(f"\nAfter epoch {epoch} model detailed report:\n\n")
+        #        with redirect_stdout(profile_file):
+        #             reporter.report()
 
         t1 = time.time()
         eval_round = (args.eval_frequency > 0) and ((epoch + 1) % args.eval_frequency == 0)

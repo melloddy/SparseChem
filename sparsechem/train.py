@@ -19,7 +19,7 @@ from contextlib import redirect_stdout
 from sparsechem import Nothing
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 #from pytorch_memlab import MemReporter
 import multiprocessing
 from pynvml import *
@@ -72,7 +72,7 @@ def train():
     parser.add_argument("--prefix", help="Prefix for run name (default 'run')", type=str, default='run')
     parser.add_argument("--verbose", help="Verbosity level: 2 = full; 1 = no progress; 0 = no output", type=int, default=2, choices=[0, 1, 2])
     parser.add_argument("--save_model", help="Set this to 0 if the model should not be saved", type=int, default=1)
-    parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=1)
+    parser.add_argument("--save_board", help="Set this to 0 if the TensorBoard should not be saved", type=int, default=0)
     parser.add_argument("--profile", help="Set this to 1 to output memory profile information", type=int, default=0)
     parser.add_argument("--mixed_precision", help="Set this to 1 to run in mixed precision mode (vs single precision)", type=int, default=0)
     parser.add_argument("--eval_train", help="Set this to 1 to calculate AUCs for train data", type=int, default=0)
@@ -167,10 +167,12 @@ def train():
     vprint(f"Run name is '{name}'.")
 
     if args.profile == 1:
-        assert (args.save_board==1), "Tensorboard should be enabled to be able to profile memory usage."
+        raise ValueError("Memory profiling not supported in this version.")
+        #assert (args.save_board==1), "Tensorboard should be enabled to be able to profile memory usage."
     if args.save_board:
-        tb_name = os.path.join(args.output_dir, "boards", name)
-        writer  = SummaryWriter(tb_name)
+        raise ValueError("Tensorboard not supported in this version.")
+        #tb_name = os.path.join(args.output_dir, "boards", name)
+        #writer  = SummaryWriter(tb_name)
     else:
         writer = Nothing()
     assert args.input_size_freq is None, "Using tail compression not yet supported."

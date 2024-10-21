@@ -18,7 +18,7 @@ from contextlib import redirect_stdout
 from sparsechem import censored_mse_loss_numpy
 from collections import namedtuple
 from scipy.sparse import csr_matrix
-from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
+#from tensorboard.backend.event_processing import plugin_event_multiplexer as event_multiplexer  # pylint: disable=line-too-long
 from .calculation_ProbCalibrationError import calcCalibrationErrors, Brier
 
 class Nothing(object):
@@ -43,35 +43,35 @@ class Nothing(object):
 SIZE_GUIDANCE = {'scalars': 10000}
 
 
-def extract_scalars(multiplexer, run, tag):
-  """Extract tabular data from the scalars at a given run and tag.
-  The result is a list of 3-tuples (wall_time, step, value).
-  """
-  tensor_events = multiplexer.Tensors(run, tag)
-  return [
-     # (event.wall_time, event.step, tf.make_ndarray(event.tensor_proto).item())
-      (event.wall_time, event.step, event.tensor_proto.float_val[0])
-      for event in tensor_events
-  ]
+#def extract_scalars(multiplexer, run, tag):
+#  """Extract tabular data from the scalars at a given run and tag.
+#  The result is a list of 3-tuples (wall_time, step, value).
+#  """
+#  tensor_events = multiplexer.Tensors(run, tag)
+#  return [
+#     # (event.wall_time, event.step, tf.make_ndarray(event.tensor_proto).item())
+#      (event.wall_time, event.step, event.tensor_proto.float_val[0])
+#      for event in tensor_events
+#  ]
+#
+
+#def create_multiplexer(logdir):
+#  multiplexer = event_multiplexer.EventMultiplexer(
+#      tensor_size_guidance=SIZE_GUIDANCE)
+#  multiplexer.AddRunsFromDirectory(logdir)
+#  multiplexer.Reload()
+#  return multiplexer
 
 
-def create_multiplexer(logdir):
-  multiplexer = event_multiplexer.EventMultiplexer(
-      tensor_size_guidance=SIZE_GUIDANCE)
-  multiplexer.AddRunsFromDirectory(logdir)
-  multiplexer.Reload()
-  return multiplexer
-
-
-def export_scalars(multiplexer, run, tag, filepath, write_headers=True):
-  data = extract_scalars(multiplexer, run, tag)
-  with open(filepath, 'w') as outfile:
-    writer = csv.writer(outfile)
-    if write_headers:
-      writer.writerow(('wall_time', 'step', 'value'))
-    for row in data:
-      writer.writerow(row)
-
+#def export_scalars(multiplexer, run, tag, filepath, write_headers=True):
+#  data = extract_scalars(multiplexer, run, tag)
+#  with open(filepath, 'w') as outfile:
+#    writer = csv.writer(outfile)
+#    if write_headers:
+#      writer.writerow(('wall_time', 'step', 'value'))
+#    for row in data:
+#      writer.writerow(row)
+#
 def return_max_val(data):
     max_val = 0
     for row in data:
@@ -145,9 +145,9 @@ def count_parameters(model):
 def calc_acc_kappa(recall, fpr, num_pos, num_neg):
     """Calculates accuracy from recall and precision."""
     num_all = num_neg + num_pos
-    tp = np.round(recall * num_pos).astype(np.int)
+    tp = np.round(recall * num_pos).astype(int)
     fn = num_pos - tp
-    fp = np.round(fpr * num_neg).astype(np.int)
+    fp = np.round(fpr * num_neg).astype(int)
     tn = num_neg - fp
     acc   = (tp + tn) / num_all
     pexp  = num_pos / num_all * (tp + fp) / num_all + num_neg / num_all * (tn + fn) / num_all
@@ -161,12 +161,13 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
         y_score    logit values
     """
     if len(y_true) <= 1 or (y_true[0] == y_true).all():
-        df = pd.DataFrame({"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan], "auc_pr_cal": [np.nan]})
+        df = pd.DataFrame() #For new behavior of concat 
+        #{"roc_auc_score": [np.nan], "auc_pr": [np.nan], "avg_prec_score": [np.nan], "f1_max": [np.nan], "p_f1_max": [np.nan], "kappa": [np.nan], "kappa_max": [np.nan], "p_kappa_max": [np.nan], "bceloss": [np.nan], "auc_pr_cal": [np.nan], "ece" : [np.nan],  "ace" : [np.nan], "std_ece": [np.nan], "std_ace":[np.nan], "brier":[np.nan]})
         return df
 
     fpr, tpr, tpr_thresholds = sklearn.metrics.roc_curve(y_true=y_true, y_score=y_score)
     roc_auc_score = sklearn.metrics.auc(x=fpr, y=tpr)
-    precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, probas_pred = y_score)
+    precision, recall, pr_thresholds = sklearn.metrics.precision_recall_curve(y_true = y_true, y_score = y_score)
     with np.errstate(divide='ignore'):
          #precision can be zero but can be ignored so disable warnings (divide by 0)
          precision_cal = 1/(((1/precision - 1)*cal_fact_aucpr_task)+1)
@@ -201,7 +202,7 @@ def all_metrics(y_true, y_score, cal_fact_aucpr_task, num_bins):
     p_kappa_max   = scipy.special.expit(tpr_thresholds[kappa_max_idx])
 
     kappa = sklearn.metrics.cohen_kappa_score(y_true, y_classes)
-    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": p_kappa_max, "bceloss": bceloss, "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace], "std_ece": [np.sqrt(vece)], "std_ace":[np.sqrt(vace)], "brier":[brier]})
+    df = pd.DataFrame({"roc_auc_score": [roc_auc_score], "auc_pr": [auc_pr], "avg_prec_score": [avg_prec_score], "f1_max": [f1_max], "p_f1_max": [p_f1_max], "kappa": [kappa], "kappa_max": [kappa_max], "p_kappa_max": [p_kappa_max], "bceloss": [bceloss], "auc_pr_cal": [auc_pr_cal], "ece" : [ece],  "ace" : [ace], "std_ece": [np.sqrt(vece)], "std_ace":[np.sqrt(vace)], "brier":[brier]})
     return df
 
 def compute_corr(x, y):
@@ -342,7 +343,7 @@ def print_table(formats, data):
 
 Column = namedtuple("Column", "key size dec title")
 try:
-    df = pd.read_csv("./displayprofile", sep="\s+")
+    df = pd.read_csv("./displayprofile", sep=r"\s+")
     columns_cr = []
     for i, row in df.iterrows():
         columns_cr.append(Column(row["metric"], size=row["size"], dec=row["dec"], title=row["title"]))
@@ -548,7 +549,7 @@ def batch_forward(net, b, input_size, loss_class, loss_regr, weights_class, weig
 
 def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                      weights_class, weights_regr, censored_weight,
-                     normalize_loss=None, num_int_batches=1, progress=True, reporter=None, writer=None, epoch=0, args=None, scaler=None, nvml_handle=None):
+                     normalize_loss=None, num_int_batches=1, progress=True, writer=None, epoch=0, args=None, scaler=None, nvml_handle=None): #reporter=None
 
     net.train()
 
@@ -566,17 +567,17 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
             mixed_precision = True
         else:
             mixed_precision = False
-        with torch.cuda.amp.autocast(enabled=mixed_precision):
+        with torch.amp.autocast("cuda", enabled=mixed_precision):
              fwd = batch_forward(net, b=b, input_size=loader.dataset.input_size, loss_class=loss_class, loss_regr=loss_regr, weights_class=weights_class, weights_regr=weights_regr, censored_weight=censored_weight, dev=dev)
-        if writer is not None and reporter is not None:
-            info = nvmlDeviceGetMemoryInfo(nvml_handle)
-            #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
-            writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
-            if batch_count == 1:
-                with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
-                   with redirect_stdout(profile_file):
-                        profile_file.write(f"\nForward pass model detailed report:\n\n")
-                        reporter.report()
+        #if writer is not None and reporter is not None:
+        #    info = nvmlDeviceGetMemoryInfo(nvml_handle)
+        #    #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+         #   writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])) 
+         #   if batch_count == 1:
+         #       with open(f"{args.output_dir}/memprofile.txt", "a+") as profile_file:
+         #          with redirect_stdout(profile_file):
+         #               profile_file.write(f"\nForward pass model detailed report:\n\n")
+         #               reporter.report()
         loss = fwd["yc_loss"] + fwd["yr_loss"] + fwd["yc_cat_loss"] + net.GetRegularizer()
 
         loss_norm = loss / norm
@@ -585,10 +586,10 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
            scaler.scale(loss_norm).backward()
         else:
            loss_norm.backward()
-        if writer is not None and reporter is not None:
-                info = nvmlDeviceGetMemoryInfo(nvml_handle)
-                #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
-                writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
+        #if writer is not None and reporter is not None:
+        #        info = nvmlDeviceGetMemoryInfo(nvml_handle)
+        #        #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
+        #        writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+1) 
         int_count += 1
         if int_count == num_int_batches:
            if mixed_precision and not isinstance(optimizer,Nothing):
@@ -596,10 +597,10 @@ def train_class_regr(net, optimizer, loader, loss_class, loss_regr, dev,
                scaler.update()
            else:
                optimizer.step()
-           if writer is not None and reporter is not None:
-               info = nvmlDeviceGetMemoryInfo(nvml_handle)
+         #  if writer is not None and reporter is not None:
+         #      info = nvmlDeviceGetMemoryInfo(nvml_handle)
                #writer.add_scalar("GPUmem", torch.cuda.memory_allocated() / 1024 ** 2, 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
-               writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
+         #      writer.add_scalar("GPUmem", float("{}".format(info.used >> 20)), 3*(int_count-1+num_int_batches*batch_count+epoch*num_int_batches*b["batch_size"])+2) 
            int_count = 0
            batch_count+=1
 

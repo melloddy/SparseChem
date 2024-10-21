@@ -13,6 +13,6 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="",
     packages=setuptools.find_packages(),
-    install_requires=["numpy", "scipy", "pandas", "scikit-learn", "tqdm", "torch", "tensorboard", "pynvml", "packaging", "pytorch_memlab"]
+    install_requires=["numpy", "scipy", "pandas", "scikit-learn", "tqdm", "torch", "pynvml", "packaging"]
 )
 

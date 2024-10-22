@@ -216,7 +216,7 @@ def compute_corr(x, y):
 
 def all_metrics_regr(y_true, y_score, y_censor=None):
     if len(y_true) <= 1:
-        df = pd.DataFrame({"rmse": [np.nan], "rmse_uncen": [np.nan], "rsquared": [np.nan], "corrcoef": [np.nan]})
+        df = pd.DataFrame(dtype=np.float64)
         return df
     ## censor0 means non-censored observations
     censor0 = y_censor == 0 if y_censor is not None else slice(None)
@@ -236,7 +236,7 @@ def all_metrics_regr(y_true, y_score, y_censor=None):
         "rmse_uncen": [np.sqrt(mse)],
         "rsquared":   [rsquared],
         "corrcoef":   [corr],
-    })
+    }, dtype=np.float64)
     return df
 
 def compute_metrics(cols, y_true, y_score, num_tasks, cal_fact_aucpr, num_bins):
@@ -658,7 +658,7 @@ def evaluate_class_regr(net, loader, loss_class, loss_regr, tasks_class, tasks_r
         out = {}
         if len(data["yc_ind"]) == 0:
             ## there are no data for classification
-            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucprm, num_bins=num_bins)
+            out["classification"] = compute_metrics([], y_true=[], y_score=[], num_tasks=num_class_tasks, cal_fact_aucpr=cal_fact_aucpr, num_bins=num_bins)
             out["classification_agg"] = out["classification"].reindex(labels=[]).mean(0)
             out["classification_agg"]["logloss"] = np.nan
         else:
